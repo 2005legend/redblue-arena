@@ -1,0 +1,67 @@
+import socket
+import sqlite3
+from pathlib import Path
+
+import httpx
+import pytest
+
+from arena.config import load_config
+from arena.sandbox import ALLOWED_PORTS, PortAllocator, TargetBootError, TargetProcess
+
+ROOT = Path(__file__).resolve().parent.parent
+CFG = load_config(str(ROOT / "arena.yaml"))
+
+
+def make(port, tmp_path, src=None):
+    return TargetProcess(src or CFG.app_dir, CFG.seed_db, port, tmp_path)
+
+
+def port_open(port):
+    s = socket.socket()
+    s.settimeout(0.5)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        s.close()
+
+
+def test_ports_never_repeat():
+    p = PortAllocator(start=9100)
+    got = [p.next() for _ in range(5)]
+    assert got == sorted(set(got)) and got[0] == 9100
+
+
+def test_start_and_stop(tmp_path):
+    t = make(PortAllocator(9200).next(), tmp_path)
+    t.prepare()
+    t.start()
+    try:
+        assert httpx.get(t.url + "/openapi.json").status_code == 200
+        assert t.port in ALLOWED_PORTS
+    finally:
+        t.stop()
+    assert not port_open(t.port) and t.port not in ALLOWED_PORTS
+
+
+def test_two_targets_isolated_db(tmp_path):
+    a, b = make(9300, tmp_path), make(9301, tmp_path)
+    a.prepare(); b.prepare()
+    c = sqlite3.connect(a.dir / "seed.db")
+    c.execute("UPDATE invoices SET amount = 1234 WHERE id = 1")
+    c.commit(); c.close()
+    cb = sqlite3.connect(b.dir / "seed.db")
+    amount = cb.execute("SELECT amount FROM invoices WHERE id = 1").fetchone()[0]
+    cb.close()
+    assert amount == 19.5
+
+
+def test_boot_failure_raises(tmp_path):
+    bad = tmp_path / "bad_src"
+    (bad / "app").mkdir(parents=True)
+    (bad / "app" / "main.py").write_text("def broken(:\n")
+    (bad / "app" / "__init__.py").write_text("")
+    t = make(9400, tmp_path, src=bad)
+    t.prepare()
+    with pytest.raises(TargetBootError):
+        t.start(timeout=5)
+    assert not port_open(9400) and 9400 not in ALLOWED_PORTS
