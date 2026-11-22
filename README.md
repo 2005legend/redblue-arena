@@ -29,12 +29,10 @@ Arena UI (replay needs no API key):
 cd ui; npm install; npm run dev              # terminal 2, open http://127.0.0.1:5173
 ```
 
-Live match (needs an OpenAI-compatible LLM; set env first):
+Live match (needs an OpenAI-compatible LLM). Copy `.env.example` to `.env`, fill in
+`ARENA_BASE_URL`, `ARENA_API_KEY`, `ARENA_MODEL` (the file is git-ignored and loaded automatically), then:
 
 ```powershell
-$env:ARENA_BASE_URL = "https://..."   # the provider's OpenAI-compatible base URL
-$env:ARENA_API_KEY  = "..."
-$env:ARENA_MODEL    = "..."           # optional ARENA_RED_MODEL / ARENA_BLUE_MODEL
 .venv\Scripts\python -m arena.cli run --config arena.yaml --yes
 ```
 
