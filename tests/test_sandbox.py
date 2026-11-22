@@ -72,3 +72,15 @@ def test_extra_paths_copied(tmp_path):
     t.prepare()
     assert (t.dir / "files" / "welcome.txt").is_file()
     assert (t.dir / "secret.txt").is_file()
+
+
+def test_relative_work_root_still_finds_database(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    t = TargetProcess(CFG.app_dir, CFG.seed_db, 9460, Path("work_rel"), extra_paths=CFG.extra_paths)
+    t.prepare()
+    t.start()
+    try:
+        r = httpx.post(t.url + "/api/login", json={"username": "alice", "password": "alice123"})
+        assert r.status_code == 200
+    finally:
+        t.stop()

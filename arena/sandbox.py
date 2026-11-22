@@ -46,7 +46,7 @@ class TargetProcess:
     def __init__(self, src_dir: Path, seed_db: Path, port: int, work_root: Path,
                  app_module: str = "app.main:app", extra_paths: list | None = None):
         self.src_dir, self.seed_db, self.port = Path(src_dir), Path(seed_db), port
-        self.work_root, self.app_module = Path(work_root), app_module
+        self.work_root, self.app_module = Path(work_root).resolve(), app_module
         self.extra_paths = list(extra_paths or [])
         self._proc: subprocess.Popen | None = None
 
