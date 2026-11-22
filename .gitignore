@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.superpowers/
+work/
+node_modules/
+*.db
+!fixtures/dev_target/seed.db
+matches/live-*
+.env
+work/
