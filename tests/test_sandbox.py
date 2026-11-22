@@ -65,3 +65,10 @@ def test_boot_failure_raises(tmp_path):
     with pytest.raises(TargetBootError):
         t.start(timeout=5)
     assert not port_open(9400) and 9400 not in ALLOWED_PORTS
+
+
+def test_extra_paths_copied(tmp_path):
+    t = TargetProcess(CFG.app_dir, CFG.seed_db, 9450, tmp_path, extra_paths=CFG.extra_paths)
+    t.prepare()
+    assert (t.dir / "files" / "welcome.txt").is_file()
+    assert (t.dir / "secret.txt").is_file()

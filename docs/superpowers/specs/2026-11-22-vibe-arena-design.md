@@ -248,6 +248,18 @@ pricing page; we expect one match to be cheap, but tokens per match are unknown 
 - **Consequence for the code:** the code must be easy for free-tier tools to continue. That means small files, a clear README of what's done and what's
   left, and plain Python with few dependencies.
 
+## 8d. Finding after building: an AI-generated app came out secure (Nov 22)
+
+We asked a fresh Claude Sonnet 5.5 agent for a mini shop app from a plain feature prompt (no security wording).
+It used parameterised SQL, ownership checks, an admin dependency and a resolved-path check, so none of SQLi,
+IDOR, admin bypass or path traversal appeared. Consequences, decided by the core team (change any):
+- The pitch must NOT claim "AI apps always ship these bugs". Honest wording: AI tools often get these wrong,
+  especially under quick prompts and weaker models; Vibe Arena verifies instead of trusting.
+- The demo target is `fixtures/dev_target`, described as "representative of common AI-generated bugs" (5.1 rule).
+- `targets/shop_app` is kept as a negative control: the arena should find nothing and not invent a win.
+- Cost if wrong: a judge may say the premise is unproven. Mitigation: try weaker models or rushed prompts and
+  report how often bugs appear; that is a measurable result for the slides.
+
 ## 9. Left to the builder
 
 - Exact folder layout, library choices inside the stack, prompt wording, UI styling, WebSocket message schema, and the payload template contents.

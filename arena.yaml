@@ -8,3 +8,4 @@ users:
   - {username: admin, password: admin123, role: admin}
 sample_ids: {own_invoice: 1, other_invoice: 3}
 admin_routes: [/api/admin/export]
+extra_paths: [files, secret.txt]

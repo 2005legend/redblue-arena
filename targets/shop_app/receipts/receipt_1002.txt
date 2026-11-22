@@ -1,0 +1,4 @@
+Receipt 1002
+Customer: bob
+Desk Lamp x1  34.90
+Total: 34.90

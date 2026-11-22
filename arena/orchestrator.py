@@ -30,7 +30,8 @@ def run_match(cfg, llm_red, llm_blue, log: EventLog, rounds: int = 3, work_root:
     emit = log.emit
     ports = PortAllocator(base_port)
     work_root, out_dir = Path(work_root), Path(out_dir)
-    live = TargetProcess(cfg.app_dir, cfg.seed_db, ports.next(), work_root, cfg.app_module)
+    live = TargetProcess(cfg.app_dir, cfg.seed_db, ports.next(), work_root, cfg.app_module,
+                       cfg.extra_paths)
     live.prepare()
     live.start()
     summary = MatchSummary(first_port=live.port)
@@ -58,7 +59,8 @@ def run_match(cfg, llm_red, llm_blue, log: EventLog, rounds: int = 3, work_root:
                 emit({"type": "score", "red": summary.red, "blue": summary.blue})
                 start = time.time()
                 res = run_blue(llm_blue, live.dir, cfg.seed_db, ex, "", cfg.functional_tests,
-                               ports, work_root, emit, app_module=cfg.app_module)
+                               ports, work_root, emit, app_module=cfg.app_module,
+                               extra_paths=cfg.extra_paths)
                 if not res.ok:
                     continue
                 old, live = live, res.new_target

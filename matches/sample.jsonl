@@ -1,5 +1,5 @@
-{"type": "match_start", "sample": true, "routes": ["/api/login", "/api/search", "/api/invoices", "/api/invoices/{id}", "/api/admin/export"], "seq": 0, "ts": 0.0}
-{"type": "health", "passed": 5, "failed": 0, "seq": 1, "ts": 0.5}
+{"type": "match_start", "sample": true, "routes": ["/api/login", "/api/search", "/api/invoices", "/api/invoices/{id}", "/api/admin/export", "/api/files"], "seq": 0, "ts": 0.0}
+{"type": "health", "passed": 6, "failed": 0, "seq": 1, "ts": 0.5}
 {"type": "red_action", "tool": "discover_routes", "args": {}, "status": null, "seq": 2, "ts": 1.5}
 {"type": "red_action", "tool": "send_http_request", "status": 200, "args": {"method": "GET", "path": "/api/search", "params": {"q": "' OR 1=1--"}}, "seq": 3, "ts": 2.7}
 {"type": "breach", "route": "/api/search", "vuln_class": "sqli", "flag": "FLAG{sqli_leaked_db}", "path": "/api/search", "seq": 4, "ts": 3.3}
@@ -8,7 +8,7 @@
 {"type": "blue_attempt", "n": 1, "ok": true, "reason": "verified", "seq": 7, "ts": 9.0}
 {"type": "patched", "route": "/api/search", "vuln_class": "sqli", "patch": "--- a/app/routes/invoices.py\n+++ b/app/routes/invoices.py\n@@ -9,9 +9,9 @@\n @router.get(\"/api/search\")\n def search(q: str = \"\"):\n     conn = get_conn()\n-    sql = f\"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE '%{q}%'\"\n+    sql = \"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE ?\"\n     try:\n-        rows = conn.execute(sql).fetchall()\n+        rows = conn.execute(sql, (f\"%{q}%\",)).fetchall()\n     except Exception as exc:\n         raise HTTPException(500, f\"query failed: {exc}\")\n     finally:\n", "ttp_seconds": 9.2, "seq": 8, "ts": 9.5}
 {"type": "score", "red": 1, "blue": 1, "seq": 9, "ts": 9.6}
-{"type": "health", "passed": 5, "failed": 0, "seq": 10, "ts": 10.0}
+{"type": "health", "passed": 6, "failed": 0, "seq": 10, "ts": 10.0}
 {"type": "red_action", "tool": "discover_routes", "args": {}, "status": null, "seq": 11, "ts": 11.0}
 {"type": "red_action", "tool": "send_http_request", "status": 200, "args": {"method": "GET", "path": "/api/invoices/3", "params": null}, "seq": 12, "ts": 12.2}
 {"type": "breach", "route": "/api/invoices/{id}", "vuln_class": "idor", "flag": "FLAG{idor_invoice_leak}", "path": "/api/invoices/3", "seq": 13, "ts": 12.8}
@@ -17,7 +17,7 @@
 {"type": "blue_attempt", "n": 1, "ok": true, "reason": "verified", "seq": 16, "ts": 19.6}
 {"type": "patched", "route": "/api/invoices/{id}", "vuln_class": "idor", "patch": "--- a/app/routes/invoices.py\n+++ b/app/routes/invoices.py\n@@ -32,10 +32,11 @@\n \n @router.get(\"/api/invoices/{invoice_id}\")\n def get_invoice(invoice_id: int, authorization: str | None = Header(default=None)):\n-    current_user(authorization)\n+    user = current_user(authorization)\n     conn = get_conn()\n     row = conn.execute(\n-        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ?\", (invoice_id,)\n+        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ? AND owner_id = ?\",\n+        (invoice_id, user[\"id\"])\n     ).fetchone()\n     conn.close()\n     if row is None:\n", "ttp_seconds": 11.4, "seq": 17, "ts": 20.1}
 {"type": "score", "red": 2, "blue": 2, "seq": 18, "ts": 20.2}
-{"type": "health", "passed": 5, "failed": 0, "seq": 19, "ts": 20.6}
+{"type": "health", "passed": 6, "failed": 0, "seq": 19, "ts": 20.6}
 {"type": "red_action", "tool": "discover_routes", "args": {}, "status": null, "seq": 20, "ts": 21.6}
 {"type": "red_action", "tool": "send_http_request", "status": 200, "args": {"method": "GET", "path": "/api/admin/export", "params": null}, "seq": 21, "ts": 22.8}
 {"type": "breach", "route": "/api/admin/export", "vuln_class": "admin_bypass", "flag": "FLAG{admin_export_bypass}", "path": "/api/admin/export", "seq": 22, "ts": 23.4}
@@ -26,5 +26,14 @@
 {"type": "blue_attempt", "n": 1, "ok": true, "reason": "verified", "seq": 25, "ts": 28.55}
 {"type": "patched", "route": "/api/admin/export", "vuln_class": "admin_bypass", "patch": "--- a/app/routes/admin.py\n+++ b/app/routes/admin.py\n@@ -1,4 +1,4 @@\n-from fastapi import APIRouter, Header\n+from fastapi import APIRouter, Header, HTTPException\n \n from app.db import get_conn\n from app.routes.auth import current_user\n@@ -8,7 +8,9 @@\n \n @router.get(\"/api/admin/export\")\n def export_all(authorization: str | None = Header(default=None)):\n-    current_user(authorization)\n+    user = current_user(authorization)\n+    if user[\"role\"] != \"admin\":\n+        raise HTTPException(403, \"admin only\")\n     conn = get_conn()\n     users = [dict(r) for r in conn.execute(\"SELECT id, username, role FROM users\")]\n     notes = [dict(r) for r in conn.execute(\"SELECT key, value FROM config\")]\n", "ttp_seconds": 8.1, "seq": 26, "ts": 29.05}
 {"type": "score", "red": 3, "blue": 3, "seq": 27, "ts": 29.15}
-{"type": "health", "passed": 5, "failed": 0, "seq": 28, "ts": 29.55}
-{"type": "match_end", "files": ["hardened.patch", "report.md"], "summary": {"red": 3, "blue": 3, "closed": 3, "total": 3, "tokens": 18432, "ttp": [9.2, 11.4, 8.1]}, "seq": 29, "ts": 30.55}
+{"type": "health", "passed": 6, "failed": 0, "seq": 28, "ts": 29.55}
+{"type": "red_action", "tool": "discover_routes", "args": {}, "status": null, "seq": 29, "ts": 30.55}
+{"type": "red_action", "tool": "send_http_request", "status": 200, "args": {"method": "GET", "path": "/api/files", "params": {"name": "../secret.txt"}}, "seq": 30, "ts": 31.75}
+{"type": "breach", "route": "/api/files", "vuln_class": "path_traversal", "flag": "FLAG{path_traversal_leak}", "path": "/api/files", "seq": 31, "ts": 32.35}
+{"type": "score", "red": 4, "blue": 3, "seq": 32, "ts": 32.45}
+{"type": "blue_thinking", "text": "Root cause in /api/files: path_traversal. Drafting a minimal fix.", "seq": 33, "ts": 33.45}
+{"type": "blue_attempt", "n": 1, "ok": true, "reason": "verified", "seq": 34, "ts": 38.6}
+{"type": "patched", "route": "/api/files", "vuln_class": "path_traversal", "patch": "--- a/app/routes/files.py\n+++ b/app/routes/files.py\n@@ -7,7 +7,8 @@\n \n @router.get(\"/api/files\")\n def get_file(name: str):\n-    path = Path(\"files\") / name\n-    if not path.is_file():\n+    base = Path(\"files\").resolve()\n+    path = (base / name).resolve()\n+    if base not in path.parents or not path.is_file():\n         raise HTTPException(404, \"not found\")\n     return {\"name\": name, \"content\": path.read_text()}\n", "ttp_seconds": 10.3, "seq": 35, "ts": 39.1}
+{"type": "score", "red": 4, "blue": 4, "seq": 36, "ts": 39.2}
+{"type": "health", "passed": 6, "failed": 0, "seq": 37, "ts": 39.6}
+{"type": "match_end", "files": ["hardened.patch", "report.md"], "summary": {"red": 4, "blue": 4, "closed": 4, "total": 4, "tokens": 24106, "ttp": [9.2, 11.4, 8.1, 10.3]}, "seq": 38, "ts": 40.6}

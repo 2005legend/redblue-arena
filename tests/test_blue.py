@@ -35,7 +35,7 @@ IDOR = Exploit("GET", "/api/invoices/3", {"Authorization": "Bearer tok-1"}, None
 
 
 def staging_with(tmp_path, port, replace):
-    t = TargetProcess(CFG.app_dir, CFG.seed_db, port, tmp_path)
+    t = TargetProcess(CFG.app_dir, CFG.seed_db, port, tmp_path, extra_paths=CFG.extra_paths)
     t.prepare()
     apply_edits(t.dir, parse_edits(block(SEARCH, replace)))
     t.start()
@@ -101,13 +101,13 @@ def test_verify_rejects_403_everyone(tmp_path):
 
 
 def test_blue_end_to_end_accepts_fix(tmp_path):
-    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9720, tmp_path)
+    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9720, tmp_path, extra_paths=CFG.extra_paths)
     live.prepare(); live.start()
     events = []
     try:
         llm = FakeLLM([{"content": block(SEARCH, FIX), "tool_calls": []}])
         res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
-                       PortAllocator(9721), tmp_path, events.append)
+                       PortAllocator(9721), tmp_path, events.append, extra_paths=CFG.extra_paths)
         assert res.ok and res.attempts == 1 and res.new_target.port != live.port
         assert "owner_id" in res.patch and "--- a/app/routes/invoices.py" in res.patch
         res.new_target.stop()
@@ -117,14 +117,35 @@ def test_blue_end_to_end_accepts_fix(tmp_path):
 
 
 def test_blue_retries_then_gives_up(tmp_path):
-    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9730, tmp_path)
+    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9730, tmp_path, extra_paths=CFG.extra_paths)
     live.prepare(); live.start()
     try:
         bad = {"content": block("this text is not in the file", "x"), "tool_calls": []}
         llm = FakeLLM([bad, bad, bad])
         res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
-                       PortAllocator(9731), tmp_path, lambda e: None)
+                       PortAllocator(9731), tmp_path, lambda e: None, extra_paths=CFG.extra_paths)
         assert not res.ok and res.attempts == 3 and llm.calls == 3
         assert ALLOWED_PORTS == {live.port}
     finally:
         live.stop()
+
+
+TRAV_OLD = '''    path = Path("files") / name
+    if not path.is_file():'''
+TRAV_FIX = '''    base = Path("files").resolve()
+    path = (base / name).resolve()
+    if base not in path.parents or not path.is_file():'''
+TRAVERSAL = Exploit("GET", "/api/files", None, {"name": "../secret.txt"}, None,
+                    "FLAG{path_traversal_leak}", "path_traversal")
+
+
+def test_verify_accepts_real_traversal_fix(tmp_path):
+    t = TargetProcess(CFG.app_dir, CFG.seed_db, 9740, tmp_path, extra_paths=CFG.extra_paths)
+    t.prepare()
+    apply_edits(t.dir, parse_edits(block(TRAV_OLD, TRAV_FIX, "app/routes/files.py")))
+    t.start()
+    try:
+        v = verify_patch(t, TRAVERSAL, CFG.functional_tests)
+        assert v.ok and not v.replay_flag_found
+    finally:
+        t.stop()

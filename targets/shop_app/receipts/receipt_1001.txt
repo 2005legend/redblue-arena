@@ -1,0 +1,4 @@
+Receipt 1001
+Customer: alice
+Espresso Mug x2  17.00
+Total: 17.00

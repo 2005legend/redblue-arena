@@ -44,9 +44,10 @@ def kill_tree(pid: int) -> None:
 
 class TargetProcess:
     def __init__(self, src_dir: Path, seed_db: Path, port: int, work_root: Path,
-                 app_module: str = "app.main:app"):
+                 app_module: str = "app.main:app", extra_paths: list | None = None):
         self.src_dir, self.seed_db, self.port = Path(src_dir), Path(seed_db), port
         self.work_root, self.app_module = Path(work_root), app_module
+        self.extra_paths = list(extra_paths or [])
         self._proc: subprocess.Popen | None = None
 
     @property
@@ -64,6 +65,12 @@ class TargetProcess:
         shutil.copytree(self.src_dir / "app", self.dir / "app",
                         ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy(self.seed_db, self.dir / "seed.db")
+        for rel in self.extra_paths:
+            src = self.src_dir / rel
+            if src.is_dir():
+                shutil.copytree(src, self.dir / rel, ignore=shutil.ignore_patterns("__pycache__"))
+            elif src.is_file():
+                shutil.copy(src, self.dir / rel)
         return self.dir
 
     def start(self, timeout: float = 15) -> None:

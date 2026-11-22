@@ -30,6 +30,10 @@ ADM_OLD = "    current_user(authorization)\n    conn = get_conn()\n    users ="
 ADM_NEW = ('    user = current_user(authorization)\n    if user["role"] != "admin":\n'
            '        raise HTTPException(403, "admin only")\n    conn = get_conn()\n    users =')
 
+TRAV_OLD = '    path = Path("files") / name\n    if not path.is_file():'
+TRAV_NEW = ('    base = Path("files").resolve()\n    path = (base / name).resolve()\n'
+            '    if base not in path.parents or not path.is_file():')
+
 FIXES = [
     ("sqli", "/api/search", blk("app/routes/invoices.py", SQL_OLD, SQL_NEW)),
     ("idor", "/api/invoices/{id}", blk("app/routes/invoices.py", IDOR_OLD, IDOR_NEW)),
@@ -37,6 +41,7 @@ FIXES = [
      blk("app/routes/admin.py", "from fastapi import APIRouter, Header\n",
          "from fastapi import APIRouter, Header, HTTPException\n")
      + blk("app/routes/admin.py", ADM_OLD, ADM_NEW)),
+    ("path_traversal", "/api/files", blk("app/routes/files.py", TRAV_OLD, TRAV_NEW)),
 ]
 EXPLOITS = [
     Exploit("GET", "/api/search", None, {"q": "' OR 1=1--"}, None, "FLAG{sqli_leaked_db}", "sqli"),
@@ -44,8 +49,10 @@ EXPLOITS = [
             "FLAG{idor_invoice_leak}", "idor"),
     Exploit("GET", "/api/admin/export", {"Authorization": "Bearer tok-1"}, None, None,
             "FLAG{admin_export_bypass}", "admin_bypass"),
+    Exploit("GET", "/api/files", None, {"name": "../secret.txt"}, None,
+            "FLAG{path_traversal_leak}", "path_traversal"),
 ]
-TTPS = [9.2, 11.4, 8.1]
+TTPS = [9.2, 11.4, 8.1, 10.3]
 
 work = Path(tempfile.mkdtemp())
 shutil.copytree(ROOT / "fixtures" / "dev_target" / "app", work / "cur" / "app")
@@ -65,8 +72,8 @@ def add(dt, **e):
 
 
 add(0, type="match_start", sample=True,
-    routes=["/api/login", "/api/search", "/api/invoices", "/api/invoices/{id}", "/api/admin/export"])
-add(0.5, type="health", passed=5, failed=0)
+    routes=["/api/login", "/api/search", "/api/invoices", "/api/invoices/{id}", "/api/admin/export", "/api/files"])
+add(0.5, type="health", passed=6, failed=0)
 red = blue = 0
 for i, (ex, patch, ttp) in enumerate(zip(EXPLOITS, patches, TTPS)):
     route = FIXES[i][1]
@@ -81,9 +88,9 @@ for i, (ex, patch, ttp) in enumerate(zip(EXPLOITS, patches, TTPS)):
     blue += 1
     add(0.5, type="patched", route=route, vuln_class=ex.vuln_class, patch=patch, ttp_seconds=ttp)
     add(0.1, type="score", red=red, blue=blue)
-    add(0.4, type="health", passed=5, failed=0)
+    add(0.4, type="health", passed=6, failed=0)
 add(1.0, type="match_end", files=["hardened.patch", "report.md"],
-    summary=dict(red=3, blue=3, closed=3, total=3, tokens=18432, ttp=TTPS))
+    summary=dict(red=4, blue=4, closed=4, total=4, tokens=24106, ttp=TTPS))
 (ROOT / "matches").mkdir(exist_ok=True)
 (ROOT / "matches" / "sample.jsonl").write_text("\n".join(json.dumps(e) for e in ev) + "\n")
 export(ROOT / "matches" / "sample", EXPLOITS, patches, TTPS)

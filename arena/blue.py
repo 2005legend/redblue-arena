@@ -86,7 +86,7 @@ def _source_listing(app_dir: Path) -> str:
 
 def run_blue(llm, live_dir: Path, seed_db: Path, exploit: Exploit, logs: str, tests_dir: Path,
              ports: PortAllocator, work_root: Path, emit, max_attempts: int = 3,
-             app_module: str = "app.main:app") -> BlueResult:
+             app_module: str = "app.main:app", extra_paths: list | None = None) -> BlueResult:
     live_dir = Path(live_dir)
     messages = [
         {"role": "system", "content": SYSTEM},
@@ -102,7 +102,7 @@ def run_blue(llm, live_dir: Path, seed_db: Path, exploit: Exploit, logs: str, te
         emit({"type": "blue_thinking", "text": text[:1500]})
         messages.append({"role": "assistant", "content": text})
         failure = None
-        staging = TargetProcess(live_dir, seed_db, ports.next(), work_root, app_module)
+        staging = TargetProcess(live_dir, seed_db, ports.next(), work_root, app_module, extra_paths)
         try:
             edits = parse_edits(text)
             if not edits:

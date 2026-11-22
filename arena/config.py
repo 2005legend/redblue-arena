@@ -13,6 +13,7 @@ class ArenaConfig:
     users: list = field(default_factory=list)
     sample_ids: dict = field(default_factory=dict)
     admin_routes: list = field(default_factory=list)
+    extra_paths: list = field(default_factory=list)
 
 
 def load_config(path: str) -> ArenaConfig:
@@ -27,4 +28,5 @@ def load_config(path: str) -> ArenaConfig:
         users=raw.get("users", []),
         sample_ids=raw.get("sample_ids", {}),
         admin_routes=raw.get("admin_routes", []),
+        extra_paths=raw.get("extra_paths", []),
     )

@@ -75,3 +75,25 @@
      users = [dict(r) for r in conn.execute("SELECT id, username, role FROM users")]
      notes = [dict(r) for r in conn.execute("SELECT key, value FROM config")]
 ```
+
+## path_traversal: `GET /api/files`
+
+- Leaked: `FLAG{path_traversal_leak}`
+- Time to patch: 10.3 s
+- Exploit replay after the fix: blocked
+
+```diff
+--- a/app/routes/files.py
++++ b/app/routes/files.py
+@@ -7,7 +7,8 @@
+ 
+ @router.get("/api/files")
+ def get_file(name: str):
+-    path = Path("files") / name
+-    if not path.is_file():
++    base = Path("files").resolve()
++    path = (base / name).resolve()
++    if base not in path.parents or not path.is_file():
+         raise HTTPException(404, "not found")
+     return {"name": name, "content": path.read_text()}
+```

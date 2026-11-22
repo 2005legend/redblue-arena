@@ -26,7 +26,7 @@ def cmd_run(a):
     work = Path("work") / match_id
     if a.capture:
         t = TargetProcess(cfg.app_dir, cfg.seed_db, PortAllocator(7900).next(), work / "capture",
-                          cfg.app_module)
+                          cfg.app_module, cfg.extra_paths)
         t.prepare()
         t.start()
         try:

@@ -37,3 +37,8 @@ def test_list_own_invoices():
 def test_admin_export_as_admin():
     r = httpx.get(f"{BASE}/api/admin/export", headers=auth("admin", "admin123"))
     assert r.status_code == 200
+
+
+def test_download_public_file():
+    r = httpx.get(f"{BASE}/api/files", params={"name": "welcome.txt"})
+    assert r.status_code == 200 and "Welcome" in r.json()["content"]

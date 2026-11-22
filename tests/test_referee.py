@@ -23,3 +23,15 @@ def test_replay_returns_flag_on_dev_target(tmp_path):
         assert ex.flag in find_flags(replay(ex, t.url).body)
     finally:
         t.stop()
+
+
+def test_replay_path_traversal_leaks_flag(tmp_path):
+    t = TargetProcess(CFG.app_dir, CFG.seed_db, PortAllocator(9510).next(), tmp_path,
+                      extra_paths=CFG.extra_paths)
+    t.prepare(); t.start()
+    try:
+        ex = Exploit(method="GET", path="/api/files", headers=None, params={"name": "../secret.txt"},
+                     json=None, flag="FLAG{path_traversal_leak}", vuln_class="path_traversal")
+        assert ex.flag in find_flags(replay(ex, t.url).body)
+    finally:
+        t.stop()

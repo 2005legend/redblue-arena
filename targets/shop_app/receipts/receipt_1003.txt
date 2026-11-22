@@ -1,0 +1,4 @@
+Receipt 1003
+Customer: bob
+Wireless Mouse x2  39.98
+Total: 39.98
