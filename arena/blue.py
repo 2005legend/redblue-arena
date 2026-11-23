@@ -52,7 +52,7 @@ def apply_edits(app_root: Path, edits: list[Edit]) -> None:
     app_root = Path(app_root).resolve()
     for e in edits:
         target = (app_root / e.path).resolve()
-        if not str(target).startswith(str(app_root / "app")) or target.suffix != ".py":
+        if not target.is_relative_to((app_root / "app").resolve()) or target.suffix != ".py":
             raise EditApplyError(f"{e.path}: edits are only allowed on app/**/*.py")
         if not target.is_file():
             raise EditApplyError(f"{e.path}: file does not exist")

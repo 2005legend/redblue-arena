@@ -11,11 +11,22 @@ def _slug(ex: Exploit) -> str:
 
 
 def security_test_source(ex: Exploit) -> str:
+    setup = [f"    headers = dict({ex.headers!r} or {{}})"]
+    if ex.login:
+        # log in again so a patch that rotates tokens cannot make this test pass vacuously
+        setup += [
+            f"    login = httpx.post(BASE + {ex.login['path']!r}, json={ex.login['json']!r})",
+            "    token = next(v for k, v in login.json().items() if 'token' in k.lower())",
+            "    for key in headers:",
+            "        if key.lower() == 'authorization':",
+            "            headers[key] = headers[key].split(' ')[0] + ' ' + token",
+        ]
     return (
         "import os\n\nimport httpx\n\n"
         'BASE = os.environ.get("ARENA_TARGET", "http://127.0.0.1:8000")\n\n\n'
         f"def test_{_slug(ex)}_does_not_leak_flag():\n"
-        f"    r = httpx.request({ex.method!r}, BASE + {ex.path!r}, headers={ex.headers!r},\n"
+        + "\n".join(setup) + "\n"
+        f"    r = httpx.request({ex.method!r}, BASE + {ex.path!r}, headers=headers or None,\n"
         f"                      params={ex.params!r}, json={ex.json!r})\n"
         f"    assert {ex.flag!r} not in r.text\n"
     )

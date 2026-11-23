@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,23 +49,23 @@ def capture_tests(llm, openapi: dict, cfg, base_url: str, out_dir: Path) -> Capt
             "openapi": openapi, "users": cfg.users, "sample_ids": cfg.sample_ids})},
     ])
     result = CaptureResult()
-    for name, src in FILE_RE.findall(reply.get("content") or ""):
-        if _uses_other_users_data(src, cfg) or _admin_route_without_admin(src, cfg):
-            result.dropped.append(name)
-            continue
-        probe = out_dir / "_probe"
-        probe.mkdir(exist_ok=True)
-        (probe / name).write_text(src, encoding="utf-8")
-        res = run_functional_tests(probe, base_url)
-        if res.failed == 0 and res.passed > 0:
-            (out_dir / name).write_text(src, encoding="utf-8")
-            result.kept.append(name)
-        else:
-            result.dropped.append(name)
-        (probe / name).unlink()
     probe = out_dir / "_probe"
-    if probe.exists():
-        probe.rmdir()
+    probe.mkdir(exist_ok=True)
+    try:
+        for name, src in FILE_RE.findall(reply.get("content") or ""):
+            if _uses_other_users_data(src, cfg) or _admin_route_without_admin(src, cfg):
+                result.dropped.append(name)
+                continue
+            (probe / name).write_text(src, encoding="utf-8")
+            res = run_functional_tests(probe, base_url)
+            if res.failed == 0 and res.passed > 0:
+                (out_dir / name).write_text(src, encoding="utf-8")
+                result.kept.append(name)
+            else:
+                result.dropped.append(name)
+            (probe / name).unlink()
+    finally:
+        shutil.rmtree(probe, ignore_errors=True)  # pytest leaves __pycache__ in the probe dir
     (out_dir / "FROZEN.sha256").write_text(_digest(out_dir))
     return result
 

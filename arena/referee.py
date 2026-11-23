@@ -16,14 +16,39 @@ class Exploit:
     json: dict | None
     flag: str
     vuln_class: str
+    login: dict | None = None  # {'path', 'json'}: how the attacker got its token
 
 
 def find_flags(text: str) -> list[str]:
     return FLAG_RE.findall(text or "")
 
 
+def find_token(text: str) -> str | None:
+    """Pull a session token out of a login response body (any JSON key containing 'token')."""
+    import json as _json
+    try:
+        data = _json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if "token" in key.lower() and isinstance(value, str):
+                return value
+    return None
+
+
 def replay(exploit: Exploit, base_url: str) -> HttpResult:
-    return send_request(exploit.method, base_url + exploit.path, headers=exploit.headers,
+    """Repeat the exploit as the same attacker. If it came with a login, log in again first, so a
+    patch cannot 'win' just by invalidating the old token (e.g. by keeping sessions in memory)."""
+    headers = dict(exploit.headers or {})
+    if exploit.login:
+        res = send_request("POST", base_url + exploit.login["path"], json=exploit.login["json"])
+        token = find_token(res.body)
+        if token:
+            for key, value in list(headers.items()):
+                if key.lower() == "authorization":
+                    headers[key] = value.split(" ")[0] + " " + token if " " in value else token
+    return send_request(exploit.method, base_url + exploit.path, headers=headers or None,
                         params=exploit.params, json=exploit.json)
 
 

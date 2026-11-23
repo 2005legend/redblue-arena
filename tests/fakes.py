@@ -8,12 +8,17 @@ class FakeLLM:
         self.script = list(script)
         self.calls = 0
         self.tokens_used = 0
+        self.seen = []
 
     def chat(self, messages, tools=None):
         self.calls += 1
+        self.seen.append(messages)
         if not self.script:
             return {"content": "done", "tool_calls": []}
-        return self.script.pop(0)
+        item = self.script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
 
 
 def tc(name, args, id="t1", raw=None):
