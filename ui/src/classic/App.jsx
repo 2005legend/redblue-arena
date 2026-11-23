@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { BlueFeed, EndpointGrid, EndScreen, RedFeed, Scoreboard } from "./components.jsx";
+import "./classic.css";
+import { BlueFeed, EndpointGrid, EndScreen, RedFeed, Scoreboard, VulnPopups } from "./components.jsx";
 import { useArena } from "./useArena.js";
 
 const HOST = "127.0.0.1:8765";
 const API = "http://" + HOST;
 
 export default function App() {
-  const { state, connect } = useArena();
+  const { state, connect, dismissPopup } = useArena();
   const [matchId, setMatchId] = useState("sample");
   const [closed, setClosed] = useState(false);
 
@@ -25,7 +26,8 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className="classic-root">
+      <div className="app">
       <Scoreboard state={state} />
       {state.status === "idle" && (
         <div className="launch">
@@ -34,6 +36,7 @@ export default function App() {
           <button className="ghost" onClick={() => replay("sample.jsonl")}>↻ Replay sample match</button>
         </div>
       )}
+      <VulnPopups items={state.popups} onDismiss={dismissPopup} />
       <EndpointGrid endpoints={state.endpoints} />
       <main className="split">
         <RedFeed items={state.red} />
@@ -42,6 +45,7 @@ export default function App() {
       {state.status === "done" && !closed && (
         <EndScreen state={state} apiBase={API} matchId={matchId} onClose={() => setClosed(true)} />
       )}
+      </div>
     </div>
   );
 }

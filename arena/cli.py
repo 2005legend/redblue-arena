@@ -21,6 +21,8 @@ def cmd_run(a):
     from arena.sandbox import PortAllocator, TargetProcess
 
     cfg = load_config(a.config)
+    if a.strategy:
+        cfg.strategy = a.strategy
     red, blue = LLM("red"), LLM("blue")
     match_id = "live-" + time.strftime("%Y%m%d-%H%M%S")
     work = Path("work") / match_id
@@ -43,9 +45,10 @@ def cmd_run(a):
     log = EventLog(Path("matches") / match_id / "events.jsonl")
     log.echo = True
     s = run_match(cfg, red, blue, log, rounds=a.rounds, work_root=work,
-                  out_dir=Path("matches") / match_id)
+                  out_dir=Path("matches") / match_id, explore=a.explore)
     print(f"\nRed {s.red} - Blue {s.blue} | closed {s.closed}/{s.total} | tokens {s.tokens} | "
-          f"ttp {s.ttp}\nExports in matches/{match_id}/")
+          f"ttp {s.ttp}\nsweep {s.sweep_findings} findings in {s.sweep_requests} requests | "
+          f"llm calls {s.llm_calls} | cache hits {s.cache_hits}\nExports in matches/{match_id}/")
 
 
 def cmd_replay(a):
@@ -68,6 +71,9 @@ def main():
     r.add_argument("--yes", action="store_true")
     r.add_argument("--capture", action="store_true")
     r.add_argument("--rounds", type=int, default=3)
+    r.add_argument("--strategy", choices=("hybrid", "sweep", "llm"), default=None)
+    r.add_argument("--explore", action="store_true",
+                   help="also run the LLM Red pass when the sweep already found bugs")
     r.set_defaults(fn=cmd_run)
     rp = sub.add_parser("replay")
     rp.add_argument("file")

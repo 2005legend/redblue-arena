@@ -3,7 +3,7 @@
 ## sqli: `GET /api/search`
 
 - Leaked: `FLAG{sqli_leaked_db}`
-- Time to patch: 9.2 s
+- Time to patch: 5.3 s
 - Exploit replay after the fix: blocked
 
 ```diff
@@ -26,7 +26,7 @@
 ## idor: `GET /api/invoices/3`
 
 - Leaked: `FLAG{idor_invoice_leak}`
-- Time to patch: 11.4 s
+- Time to patch: 5.3 s
 - Exploit replay after the fix: blocked
 
 ```diff
@@ -51,26 +51,19 @@
 ## admin_bypass: `GET /api/admin/export`
 
 - Leaked: `FLAG{admin_export_bypass}`
-- Time to patch: 8.1 s
+- Time to patch: 5.3 s
 - Exploit replay after the fix: blocked
 
 ```diff
 --- a/app/routes/admin.py
 +++ b/app/routes/admin.py
-@@ -1,4 +1,4 @@
--from fastapi import APIRouter, Header
-+from fastapi import APIRouter, Header, HTTPException
- 
- from app.db import get_conn
- from app.routes.auth import current_user
-@@ -8,7 +8,9 @@
+@@ -8,7 +8,8 @@
  
  @router.get("/api/admin/export")
  def export_all(authorization: str | None = Header(default=None)):
 -    current_user(authorization)
 +    user = current_user(authorization)
-+    if user["role"] != "admin":
-+        raise HTTPException(403, "admin only")
++    assert user["role"] == "admin", "admin only"
      conn = get_conn()
      users = [dict(r) for r in conn.execute("SELECT id, username, role FROM users")]
      notes = [dict(r) for r in conn.execute("SELECT key, value FROM config")]
@@ -79,7 +72,7 @@
 ## path_traversal: `GET /api/files`
 
 - Leaked: `FLAG{path_traversal_leak}`
-- Time to patch: 10.3 s
+- Time to patch: 4.2 s
 - Exploit replay after the fix: blocked
 
 ```diff

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "patches": {
+    "750431ccc09bbc9f72a91d2afa1186642afc1e367bd37912269ca4ab2c92e84a": {
+      "vuln_class": "sqli",
+      "route": "/api/search",
+      "edits": [
+        {
+          "path": "app/routes/invoices.py",
+          "search": "    sql = f\"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE '%{q}%'\"\n    try:\n        rows = conn.execute(sql).fetchall()",
+          "replace": "    sql = \"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE ?\"\n    try:\n        rows = conn.execute(sql, (f\"%{q}%\",)).fetchall()"
+        }
+      ]
+    },
+    "1a1c6f0fc2acf147bc0e71ea39fb8c0224061279016f2875e1792b1d5f4636e0": {
+      "vuln_class": "idor",
+      "route": "/api/invoices",
+      "edits": [
+        {
+          "path": "app/routes/invoices.py",
+          "search": "    current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ?\", (invoice_id,)",
+          "replace": "    user = current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ? AND owner_id = ?\",\n        (invoice_id, user[\"id\"])"
+        }
+      ]
+    },
+    "5bf3139c07b5a209c55c7659148f8d36ac93739a0058a0b0d68feaa9e818a4cf": {
+      "vuln_class": "admin_bypass",
+      "route": "/api/admin/export",
+      "edits": [
+        {
+          "path": "app/routes/admin.py",
+          "search": "    current_user(authorization)\n    conn = get_conn()",
+          "replace": "    user = current_user(authorization)\n    assert user[\"role\"] == \"admin\", \"admin only\"\n    conn = get_conn()"
+        }
+      ]
+    },
+    "44c13e47954f85d3931d5ff757cd7b0e784b412e4b2513991d80e8607b81e480": {
+      "vuln_class": "path_traversal",
+      "route": "/api/files",
+      "edits": [
+        {
+          "path": "app/routes/files.py",
+          "search": "    path = Path(\"files\") / name\n    if not path.is_file():",
+          "replace": "    base = Path(\"files\").resolve()\n    path = (base / name).resolve()\n    if base not in path.parents or not path.is_file():"
+        }
+      ]
+    }
+  }
+}

@@ -12,7 +12,10 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
+from arena import site_api
+
 MATCHES = Path("matches")
+CONFIG = "arena.yaml"
 STATE: dict = {"log": None, "match_id": None, "thread": None}
 
 app = FastAPI(title="Vibe Arena server")
@@ -23,6 +26,73 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 def current():
     running = bool(STATE["thread"] and STATE["thread"].is_alive())
     return {"match_id": STATE["match_id"], "running": running}
+
+
+def _battle(match: dict) -> dict:
+    data = site_api._public(match)
+    try:
+        data["replay"] = Path(match["_source"]).resolve().relative_to(
+            MATCHES.resolve()).as_posix()
+    except ValueError:
+        data["replay"] = Path(match["_source"]).name
+    return data
+
+
+@app.get("/api/battles")
+def battles():
+    return [_battle(m) for m in site_api.list_matches(MATCHES)]
+
+
+@app.get("/api/battles/{battle_id}")
+def battle(battle_id: str):
+    match = next((m for m in site_api.list_matches(MATCHES) if m["id"] == battle_id), None)
+    if not match:
+        raise HTTPException(404, "battle not found")
+    return _battle(match)
+
+
+@app.get("/api/battles/{battle_id}/report")
+def battle_report(battle_id: str):
+    rep = site_api.report(MATCHES, battle_id)
+    if rep is None:
+        raise HTTPException(404, "battle not found")
+    return rep
+
+
+@app.post("/api/battles/{battle_id}/{action}")
+def battle_control(battle_id: str, action: str):
+    raise HTTPException(409, "battles are recorded live runs; start one with POST /api/match/start")
+
+
+@app.get("/api/dashboard/stats")
+def dashboard_stats():
+    return site_api.dashboard(MATCHES)
+
+
+@app.get("/api/vulnerabilities")
+def vulnerability_list():
+    return site_api.vulnerabilities(MATCHES)
+
+
+@app.get("/api/patches")
+def patch_list():
+    return site_api.patches(MATCHES)
+
+
+@app.get("/api/target/config/status")
+def target_config_status():
+    from arena.config import load_config
+    try:
+        cfg = load_config(CONFIG)
+    except (OSError, ValueError, KeyError) as exc:
+        raise HTTPException(503, f"arena config unavailable: {exc}")
+    return site_api.target_status(cfg, MATCHES)
+
+
+@app.post("/api/target/{rest:path}")
+def target_control(rest: str):
+    raise HTTPException(503, "the arena exposes read-only target status; the target app only runs "
+                             "inside a match sandbox, so there is no exploit console or mode switch")
 
 
 @app.post("/api/match/start")
@@ -60,6 +130,8 @@ async def ws(socket: WebSocket, replay: str | None = None, speed: float = 1.0):
                 if not line.strip():
                     continue
                 e = json.loads(line)
+                if e.get("type") == "match_start":
+                    e = {**e, "sample": True}  # a replay is never a live run; say so on screen
                 await asyncio.sleep(min(max((e.get("ts", prev) - prev) / max(speed, 0.1), 0), 2.0))
                 prev = e.get("ts", prev)
                 await socket.send_json(e)

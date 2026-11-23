@@ -19,6 +19,8 @@ def test_replay_streams_sample_in_order(monkeypatch):
                 break
     types = [e["type"] for e in events]
     assert types[0] == "match_start" and types.count("breach") == 4 and types.count("patched") == 4
+    assert events[0]["sample"] is True  # a replay is always labelled as a sample
+    assert events[0]["strategy"] == "sweep"
     assert [e["seq"] for e in events] == list(range(len(events)))
 
 

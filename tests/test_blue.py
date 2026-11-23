@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from arena.blue import (EditApplyError, apply_edits, make_patch, parse_edits, run_blue)
+from arena.blue import (Edit, EditApplyError, apply_edits, cache_key, cached_edits, make_patch,
+                        parse_edits, relevant_files, run_blue, store_edits)
 from arena.config import load_config
 from arena.referee import Exploit, verify_patch
 from arena.sandbox import ALLOWED_PORTS, PortAllocator, TargetProcess
@@ -74,6 +75,14 @@ def test_apply_rejects_path_escape(tmp_path):
         apply_edits(tmp_path, parse_edits(block("a", "b", "../evil.py")))
 
 
+def test_apply_rejects_sibling_dir_with_app_prefix(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app_backup").mkdir()
+    (tmp_path / "app_backup" / "x.py").write_text("a = 1\n")
+    with pytest.raises(EditApplyError):
+        apply_edits(tmp_path, parse_edits(block("a = 1", "a = 2", "app_backup/x.py")))
+
+
 def test_make_patch_has_headers(tmp_path):
     for d, v in (("before", "x = 1\n"), ("after", "x = 2\n")):
         (tmp_path / d / "app").mkdir(parents=True)
@@ -109,7 +118,10 @@ def test_blue_end_to_end_accepts_fix(tmp_path):
         res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
                        PortAllocator(9721), tmp_path, events.append, extra_paths=CFG.extra_paths)
         assert res.ok and res.attempts == 1 and res.new_target.port != live.port
+        assert not res.cached
         assert "owner_id" in res.patch and "--- a/app/routes/invoices.py" in res.patch
+        prompt = llm.seen[0][1]["content"]
+        assert "Recipe (IDOR)" in prompt and "app/routes/admin.py" not in prompt
         res.new_target.stop()
     finally:
         live.stop()
@@ -125,6 +137,23 @@ def test_blue_retries_then_gives_up(tmp_path):
         res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
                        PortAllocator(9731), tmp_path, lambda e: None, extra_paths=CFG.extra_paths)
         assert not res.ok and res.attempts == 3 and llm.calls == 3
+        assert ALLOWED_PORTS == {live.port}
+    finally:
+        live.stop()
+
+
+def test_unexpected_verification_error_stops_staging(tmp_path, monkeypatch):
+    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9750, tmp_path, extra_paths=CFG.extra_paths)
+    live.prepare(); live.start()
+    try:
+        def boom(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("arena.blue.verify_patch", boom)
+        llm = FakeLLM([{"content": block(SEARCH, FIX), "tool_calls": []}])
+        with pytest.raises(RuntimeError):
+            run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
+                     PortAllocator(9751), tmp_path, lambda e: None, extra_paths=CFG.extra_paths)
         assert ALLOWED_PORTS == {live.port}
     finally:
         live.stop()
@@ -149,3 +178,56 @@ def test_verify_accepts_real_traversal_fix(tmp_path):
         assert v.ok and not v.replay_flag_found
     finally:
         t.stop()
+
+
+def test_relevant_files_narrow_to_the_implicated_route():
+    idor = [f.relative_to(CFG.app_dir).as_posix() for f in relevant_files(CFG.app_dir, IDOR)]
+    assert "app/routes/invoices.py" in idor and "app/routes/auth.py" in idor
+    assert "app/routes/admin.py" not in idor
+    trav = [f.relative_to(CFG.app_dir).as_posix() for f in relevant_files(CFG.app_dir, TRAVERSAL)]
+    assert "app/routes/files.py" in trav and "app/routes/invoices.py" not in trav
+
+
+def test_cache_key_ignores_token_and_id_but_not_class():
+    same_route = Exploit("GET", "/api/invoices/7", {"Authorization": "Bearer tok-9"}, None, None,
+                         "FLAG{other}", "idor")
+    assert cache_key(IDOR) == cache_key(same_route)
+    assert cache_key(IDOR) != cache_key(TRAVERSAL)
+
+
+def test_blue_reuses_a_verified_cached_fix_without_calling_the_llm(tmp_path):
+    cache = tmp_path / "cache.json"
+    store_edits(cache, IDOR, parse_edits(block(SEARCH, FIX)))
+    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9760, tmp_path, extra_paths=CFG.extra_paths)
+    live.prepare(); live.start()
+    events = []
+    try:
+        llm = FakeLLM([])
+        res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
+                       PortAllocator(9761), tmp_path, events.append,
+                       extra_paths=CFG.extra_paths, cache_path=cache)
+        assert res.ok and res.cached and res.attempts == 0 and llm.calls == 0
+        assert any(e["type"] == "blue_cache" and e["hit"] for e in events)
+        res.new_target.stop()
+    finally:
+        live.stop()
+
+
+def test_stale_cached_fix_is_dropped_and_redone_by_the_llm(tmp_path):
+    cache = tmp_path / "cache.json"
+    store_edits(cache, IDOR, [
+        Edit("app/routes/invoices.py", "text that is not in the file", "whatever")])
+    live = TargetProcess(CFG.app_dir, CFG.seed_db, 9770, tmp_path, extra_paths=CFG.extra_paths)
+    live.prepare(); live.start()
+    events = []
+    try:
+        llm = FakeLLM([{"content": block(SEARCH, FIX), "tool_calls": []}])
+        res = run_blue(llm, live.dir, CFG.seed_db, IDOR, "", CFG.functional_tests,
+                       PortAllocator(9771), tmp_path, events.append,
+                       extra_paths=CFG.extra_paths, cache_path=cache)
+        assert res.ok and not res.cached and llm.calls == 1
+        assert any(e["type"] == "blue_cache" and not e["hit"] for e in events)
+        assert cached_edits(cache, IDOR) == parse_edits(block(SEARCH, FIX))
+        res.new_target.stop()
+    finally:
+        live.stop()

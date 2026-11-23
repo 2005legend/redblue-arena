@@ -5,7 +5,11 @@ Do not commit for someone else.
 
 ## Already done by the core team
 Sandbox, referee, Red/Blue agents, test capture, exporter, match runner, replay server, arena UI, 4 bug classes
-(SQLi, IDOR, admin bypass, path traversal) on fixtures/dev_target, 32 tests, sample match.
+(SQLi, IDOR, admin bypass, path traversal) on fixtures/dev_target, 73 tests, sample match.
+Token strategy (Nov 23): deterministic template sweep finds all current bugs at 0 tokens in a normal run; Blue uses
+per-class recipes, narrowed file lists and a verified-patch cache (patches/cache.json) so repeated matches need no
+LLM calls. See "Token strategy" in the README. New targets just need `strategy`, `login_path` and `loot_paths`
+set in their arena.yaml.
 
 ## Person A: demo target and pilot support
 - Try 2-3 more AI tools or prompts for a shop app (targets/shop_app/GENERATION_LOG.md shows how, and that our

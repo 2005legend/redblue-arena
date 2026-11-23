@@ -9,3 +9,9 @@ users:
 sample_ids: {own_invoice: 1, other_invoice: 3}
 admin_routes: [/api/admin/export]
 extra_paths: [files, secret.txt]
+loot_paths: [secret.txt]
+attacker_users: [alice]
+flag_owners:
+  FLAG{idor_invoice_leak}: bob
+strategy: hybrid
+cache_path: patches/cache.json

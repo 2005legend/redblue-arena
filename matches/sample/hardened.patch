@@ -30,20 +30,13 @@
      if row is None:
 --- a/app/routes/admin.py
 +++ b/app/routes/admin.py
-@@ -1,4 +1,4 @@
--from fastapi import APIRouter, Header
-+from fastapi import APIRouter, Header, HTTPException
- 
- from app.db import get_conn
- from app.routes.auth import current_user
-@@ -8,7 +8,9 @@
+@@ -8,7 +8,8 @@
  
  @router.get("/api/admin/export")
  def export_all(authorization: str | None = Header(default=None)):
 -    current_user(authorization)
 +    user = current_user(authorization)
-+    if user["role"] != "admin":
-+        raise HTTPException(403, "admin only")
++    assert user["role"] == "admin", "admin only"
      conn = get_conn()
      users = [dict(r) for r in conn.execute("SELECT id, username, role FROM users")]
      notes = [dict(r) for r in conn.execute("SELECT key, value FROM config")]
