@@ -1,5 +1,8 @@
 # Demo video script (about 3 minutes)
 
+Shot-by-shot timing, the two-recording-pass plan, filming setup and fallbacks are in
+`docs/demo/storyboard.md`; this file is the narration outline.
+
 Record the arena UI at http://127.0.0.1:5173 (screen and voice), with the victim view open either in
 its centre column or full screen at http://127.0.0.1:8765/target. Use the live match if the pilot
 works; otherwise use the replay and say clearly on screen that it is a recorded run.
