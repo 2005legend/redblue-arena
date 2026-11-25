@@ -1,0 +1,28 @@
+# Website 2 - the demo target: a cleaner storefront with 10 seeded bugs across the
+# seven arena bug classes. Start the site with:
+#   $env:ARENA_CONFIG='arena.demo.yaml'; .venv\Scripts\python -m arena.cli serve
+# The default arena.yaml (dev_target) is untouched and stays what the tests run against.
+app_dir: fixtures/demo_shop
+app_module: app.main:app
+seed_db: fixtures/demo_shop/seed.db
+functional_tests: fixtures/demo_shop/tests_functional
+users:
+  - {username: alice, password: alice123, role: user}
+  - {username: bob, password: bob123, role: user}
+  - {username: carol, password: carol123, role: user}
+  - {username: admin, password: admin123, role: admin}
+sample_ids: {own_invoice: 1, other_invoice: 2}
+admin_routes: [/api/admin/export, /api/admin/customers]
+extra_paths: [files, secret.env, backup.sql]
+loot_paths: [secret.env, backup.sql]
+attacker_users: [alice]
+flag_owners:
+  FLAG{idor_order_receipt}: bob
+  FLAG{idor_ticket_log}: carol
+  FLAG{mass_assignment_role}: admin
+  FLAG{mass_assignment_admin}: admin
+  FLAG{admin_export_bypass}: admin
+  FLAG{admin_customer_bypass}: admin
+  FLAG{debug_env_leak}: admin
+strategy: hybrid
+cache_path: patches/cache.demo.json

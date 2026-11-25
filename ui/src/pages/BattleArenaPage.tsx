@@ -455,6 +455,48 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
         </div>
       )}
 
+
+      {/* LIVE VICTIM SITE: full width, because this is the actual app under attack.
+          /target?embed=1 is the same victim page as the full-screen view, without its feed. */}
+      <div className="rounded-xl bg-[#090d18] border border-cyan-900/60 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-cyan-950">
+          <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold tracking-widest text-cyan-400">
+            <Globe className="w-3.5 h-3.5" /> LIVE VICTIM SITE
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-cyan-900 bg-cyan-950/60 text-cyan-300">FASTAPI</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-cyan-900 bg-cyan-950/60 text-cyan-300">SQLITE</span>
+          <span className="text-[10px] font-mono text-slate-500 hidden md:inline">
+            the real storefront the agents are hitting, served by the sandbox
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+              live?.alive
+                ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                : 'bg-slate-900 text-slate-400 border-slate-700'
+            }`}>
+              {live?.alive ? `LIVE :${live.port}` : 'OFFLINE — start a match'}
+            </span>
+            <a href="/target" target="_blank" rel="noreferrer"
+              className="text-[10px] font-mono px-2 py-0.5 rounded border border-cyan-800 bg-cyan-950 text-cyan-300 hover:bg-cyan-900 flex items-center gap-1">
+              full screen <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </span>
+        </div>
+        {live?.alive && live.url ? (
+          <iframe src="/target?embed=1" title="Live victim site under attack"
+            className="w-full h-[520px] bg-[#070b12]" />
+        ) : (
+          <div className="h-[300px] flex flex-col items-center justify-center gap-2 px-6 text-center">
+            <ShieldAlert className="w-6 h-6 text-slate-600" />
+            <p className="text-xs font-mono text-slate-400">No target is running.</p>
+            <p className="text-[11px] font-mono text-slate-600">
+              Start a match and the real storefront appears here while Red attacks it —
+              leaks the canary, then refuses the same request after every verified patch.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* 3-COLUMN MAIN ARENA GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT PANEL: RED AGENT */}
@@ -525,48 +567,6 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
                 HEALTH: {healthText}
               </span>
-            </div>
-
-            {/* The real storefront the agents are hitting, straight from the sandbox port.
-                /target?embed=1 is the same victim page as the full-screen view, without its feed. */}
-            <div className="mb-4 rounded-lg overflow-hidden border border-cyan-900/60 bg-black/60">
-              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-cyan-950">
-                <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-widest text-cyan-400">
-                  <Globe className="w-3 h-3" /> LIVE VICTIM SITE
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                    live?.alive
-                      ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                      : 'bg-slate-900 text-slate-400 border-slate-700'
-                  }`}>
-                    {live?.alive ? `LIVE :${live.port}` : 'OFFLINE'}
-                  </span>
-                  <a
-                    href="/target"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-cyan-800 bg-cyan-950 text-cyan-300 hover:bg-cyan-900 flex items-center gap-1"
-                  >
-                    full screen <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                </div>
-              </div>
-              {live?.alive && live.url ? (
-                <iframe
-                  src="/target?embed=1"
-                  title="Live victim site under attack"
-                  className="w-full h-[320px] bg-[#070b12]"
-                />
-              ) : (
-                <div className="h-[320px] flex flex-col items-center justify-center gap-1.5 px-5 text-center">
-                  <ShieldAlert className="w-5 h-5 text-slate-600" />
-                  <p className="text-[11px] font-mono text-slate-400">No target is running.</p>
-                  <p className="text-[10px] font-mono text-slate-600">
-                    Start a match and the real MiniShop storefront appears here while Red attacks it.
-                  </p>
-                </div>
-              )}
             </div>
 
             <div className="p-3.5 rounded-lg bg-black/60 border border-cyan-900/50 space-y-2 mb-4">

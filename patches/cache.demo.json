@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "patches": {
+    "615dac18ad567f51d702f71a110384ddf46a000c6b03ae45b5373b30df141d46": {
+      "vuln_class": "sqli",
+      "route": "/api/products/search",
+      "edits": [
+        {
+          "path": "app/routes/products.py",
+          "search": "    query = (f\"SELECT id, name, price, internal_note FROM products \"\n             f\"WHERE archived = 0 AND name LIKE '%{q}%'\")\n",
+          "replace": "    query = (\"SELECT id, name, price, internal_note FROM products \"\n             \"WHERE archived = 0 AND name LIKE ?\")\n"
+        },
+        {
+          "path": "app/routes/products.py",
+          "search": "    rows = [dict(r) for r in conn.execute(query).fetchall()]\n",
+          "replace": "    rows = [dict(r) for r in conn.execute(query, (f\"%{q}%\",)).fetchall()]\n"
+        }
+      ]
+    },
+    "b575acccd0c3410847fb841ba4991ab1809f431a143352f283c6da7dc27e3d76": {
+      "vuln_class": "idor",
+      "route": "/api/orders",
+      "edits": [
+        {
+          "path": "app/routes/orders.py",
+          "search": "    row = conn.execute(\"SELECT * FROM orders WHERE id=?\", (order_id,)).fetchone()\n",
+          "replace": "    row = conn.execute(\"SELECT * FROM orders WHERE id=? AND user_id=?\",\n                       (order_id, user[\"id\"])).fetchone()\n"
+        }
+      ]
+    },
+    "cd5730002712a2429ca15e38fff719fdd3612c79b63e5a6f3a47cf1ac2ba7e59": {
+      "vuln_class": "idor",
+      "route": "/api/support/tickets",
+      "edits": [
+        {
+          "path": "app/routes/tickets.py",
+          "search": "    row = conn.execute(\"SELECT * FROM tickets WHERE id=?\", (ticket_id,)).fetchone()\n",
+          "replace": "    row = conn.execute(\"SELECT * FROM tickets WHERE id=? AND user_id=?\",\n                       (ticket_id, user[\"id\"])).fetchone()\n"
+        }
+      ]
+    },
+    "5bf3139c07b5a209c55c7659148f8d36ac93739a0058a0b0d68feaa9e818a4cf": {
+      "vuln_class": "admin_bypass",
+      "route": "/api/admin/export",
+      "edits": [
+        {
+          "path": "app/routes/admin.py",
+          "search": "from fastapi import APIRouter, Header\n",
+          "replace": "from fastapi import APIRouter, Header, HTTPException\n"
+        },
+        {
+          "path": "app/routes/admin.py",
+          "search": "def export_all(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if not user:\n        return {\"error\": \"login required\"}\n",
+          "replace": "def export_all(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if not user or user[\"role\"] != \"admin\":\n        raise HTTPException(403, \"admin only\")\n"
+        }
+      ]
+    },
+    "ec434506ad4d600899138a16cd69e5c1a26d7a7058f80d615907eca09be6e5ac": {
+      "vuln_class": "admin_bypass",
+      "route": "/api/admin/customers",
+      "edits": [
+        {
+          "path": "app/routes/admin.py",
+          "search": "def customers(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if not user:\n        return {\"error\": \"login required\"}\n",
+          "replace": "def customers(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if not user or user[\"role\"] != \"admin\":\n        raise HTTPException(403, \"admin only\")\n"
+        }
+      ]
+    },
+    "35a920371f0749c9315c2a8bfff7999e1b950bbbc94cf0b162f1aed34d3b2c50": {
+      "vuln_class": "path_traversal",
+      "route": "/api/downloads",
+      "edits": [
+        {
+          "path": "app/routes/downloads.py",
+          "search": "def download(file: str):\n    try:\n        return Path(_FILES / file).read_text(errors=\"replace\")\n    except OSError as exc:\n        return {\"error\": str(exc)}\n",
+          "replace": "def download(file: str):\n    base = _FILES.resolve()\n    target = (_FILES / file).resolve()\n    if target != base and base not in target.parents:\n        return {\"error\": \"outside the library\"}\n    try:\n        return target.read_text(errors=\"replace\")\n    except OSError as exc:\n        return {\"error\": str(exc)}\n"
+        }
+      ]
+    },
+    "725e615e64bc2b933494267e320b4d707bcef81b16b308125d77030efbb2971b": {
+      "vuln_class": "path_traversal",
+      "route": "/api/attachments",
+      "edits": [
+        {
+          "path": "app/routes/attachments.py",
+          "search": "def attachment(name: str):\n    try:\n        return Path(_FILES / name).read_text(errors=\"replace\")\n    except OSError as exc:\n        return {\"error\": str(exc)}\n",
+          "replace": "def attachment(name: str):\n    base = _FILES.resolve()\n    target = (_FILES / name).resolve()\n    if target != base and base not in target.parents:\n        return {\"error\": \"outside the library\"}\n    try:\n        return target.read_text(errors=\"replace\")\n    except OSError as exc:\n        return {\"error\": str(exc)}\n"
+        }
+      ]
+    },
+    "0ba6948dca671d0a1d15098276e9a1fe257aafcd576755b5715e927d149a6720": {
+      "vuln_class": "mass_assignment",
+      "route": "/api/account",
+      "edits": [
+        {
+          "path": "app/routes/account.py",
+          "search": "    if body.display_name:\n        conn.execute(\"UPDATE users SET display_name=? WHERE id=?\",\n                     (body.display_name, user[\"id\"]))\n    if body.role:\n        conn.execute(\"UPDATE users SET role=? WHERE id=?\", (body.role, user[\"id\"]))\n    conn.commit()\n",
+          "replace": "    if body.display_name:\n        conn.execute(\"UPDATE users SET display_name=? WHERE id=?\",\n                     (body.display_name, user[\"id\"]))\n    # role is never client-writable\n    if not body.display_name:\n        conn.execute(\"UPDATE users SET display_name=display_name WHERE id=?\",\n                     (user[\"id\"],))\n    conn.commit()\n"
+        }
+      ]
+    },
+    "b1827f77632509d7204a5bc2519c59b6f48773fcba89e8629fd452e81d5b709f": {
+      "vuln_class": "mass_assignment",
+      "route": "/api/account/settings",
+      "edits": [
+        {
+          "path": "app/routes/account.py",
+          "search": "    if body.theme:\n        conn.execute(\"UPDATE users SET display_name=COALESCE(display_name,'') WHERE id=? \"\n                     \"-- theme storage placeholder\", (user[\"id\"],))\n    if body.is_admin is not None:\n        conn.execute(\"UPDATE users SET role=? WHERE id=?\",\n                     (\"admin\" if body.is_admin else \"user\", user[\"id\"]))\n    conn.commit()\n",
+          "replace": "    if body.theme:\n        conn.execute(\"UPDATE users SET display_name=COALESCE(display_name,'') WHERE id=? \"\n                     \"-- theme storage placeholder\", (user[\"id\"],))\n    # is_admin is never client-writable\n    conn.commit()\n"
+        }
+      ]
+    },
+    "365da9a7f67f75e320de07e6f5d348dac1176ea4d290e676089d386ea8018dba": {
+      "vuln_class": "debug_exposure",
+      "route": "/api/debug/env",
+      "edits": [
+        {
+          "path": "app/routes/debug.py",
+          "search": "from fastapi import APIRouter\n",
+          "replace": "from fastapi import APIRouter, Header, HTTPException\n\nfrom app.routes.auth import current_user\n"
+        },
+        {
+          "path": "app/routes/debug.py",
+          "search": "def debug_env():\n",
+          "replace": "def debug_env(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if not user or user[\"role\"] != \"admin\":\n        raise HTTPException(403, \"admin only\")\n"
+        }
+      ]
+    },
+    "fee54000eafcf20be1fc60eb89fab9ddbc63300172409d3ca828ba19e81328c4": {
+      "vuln_class": "code_injection",
+      "route": "/api/widgets/preview",
+      "edits": [
+        {
+          "path": "app/routes/widgets.py",
+          "search": "from fastapi import APIRouter\n\nrouter = APIRouter()\n\n# Kept at module scope so the eval sandbox can see it; the sweep payload scans globals().\nWIDGET_MASTER_KEY = \"FLAG{code_injection_eval}\"\n\n\n# CODE INJECTION (class: code_injection): a promo widget preview evaluates the caller's\n# expression server-side, so `[v for v in globals().values() if 'FLAG{' in str(v)]`\n# walks module globals and returns the key.\n# FIX: parse with ast and allow a small arithmetic grammar only; reject everything else.\n@router.get(\"/api/widgets/preview\")\ndef preview(expr: str = \"\"):\n    try:\n        result = eval(expr)  # noqa: S307 - demo vulnerability\n        return {\"expr\": expr, \"preview\": str(result)}\n    except Exception as exc:  # any failure still echoes the reason back to the client\n        return {\"expr\": expr, \"error\": str(exc)}\n",
+          "replace": "from fastapi import APIRouter\nimport ast\n\nrouter = APIRouter()\n\n# Kept at module scope so the eval sandbox can see it; the sweep payload scans globals().\nWIDGET_MASTER_KEY = \"FLAG{code_injection_eval}\"\n\n\n# CODE INJECTION (class: code_injection): a promo widget preview evaluates the caller's\n# expression server-side, so `[v for v in globals().values() if 'FLAG{' in str(v)]`\n# walks module globals and returns the key.\n# FIX: parse with ast and allow a small arithmetic grammar only; reject everything else.\n@router.get(\"/api/widgets/preview\")\ndef preview(expr: str = \"\"):\n    try:\n        node = ast.parse(expr, mode=\"eval\")\n    except SyntaxError as exc:\n        return {\"expr\": expr, \"error\": f\"not an expression: {exc}\"}\n    for sub in ast.walk(node):\n        if isinstance(sub, (ast.Name, ast.Call, ast.Attribute, ast.Subscript)):\n            return {\"expr\": expr, \"error\": \"only numbers and arithmetic are allowed\"}\n    import operator as _op\n    ops = {ast.Add: _op.add, ast.Sub: _op.sub, ast.Mult: _op.mul, ast.Div: _op.truediv}\n    try:\n        def _ev(n):\n            if isinstance(n, ast.Constant):\n                return n.value\n            if isinstance(n, ast.BinOp):\n                return ops[type(n.op)](_ev(n.left), _ev(n.right))\n            if isinstance(n, ast.UnaryOp):\n                return (-_ev(n.operand) if isinstance(n.op, ast.USub)\n                        else _ev(n.operand))\n            raise ValueError(\"unsupported\")\n        return {\"expr\": expr, \"preview\": str(_ev(node.body))}\n    except Exception as exc:  # division by zero and friends, no leak either way\n        return {\"expr\": expr, \"error\": str(exc)}\n"
+        }
+      ]
+    }
+  }
+}
