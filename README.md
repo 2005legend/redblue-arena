@@ -206,7 +206,8 @@ NOT done yet:
    `matches/live-20261124-081222` (7 classes: 7/7 closed, 5 cache hits, 2 fresh Blue patches,
    2,329 tokens / 2 LLM calls). `matches/live-20261124-081411` is the final warm 7-class run that
    became `sample.jsonl`: 7/7 closed, 25 sweep requests, 7 cache hits, 0 LLM calls, 0 tokens, fixes
-   in 6.5–7.4 s, 9/9 health. Still to record: per-class success over 3 runs and refusal rate.
+   in 6.5–7.4 s, 9/9 health. Benchmarks measured on Nov 25 are in "Pilot results" below; the only
+   cell still open is tokens-per-match with the budget guard actually tripped.
 2. **Demo target honesty.** We asked a fresh AI agent for a shop app with a plain prompt and it came out secure
    (`targets/shop_app/GENERATION_LOG.md`). So `fixtures/dev_target` is described as "representative of common
    AI-generated bugs", never as "unedited AI output". Try other tools or prompts if you want a natural one.
@@ -231,5 +232,18 @@ NOT done yet:
 | live-20261124-080946 | 5/7 closed, 21,768 tokens, 15 LLM calls. Fully cold 7-class run: mass assignment and code injection failed fresh generation (missing import / broken functional test); fixed the recipes afterwards. |
 | live-20261124-081222 | 7/7 closed, 2,329 tokens, 2 LLM calls, 5 cache hits. Cold additions after the recipe fix: Blue wrote mass-assignment and code-injection patches from scratch in one round-trip each. |
 | live-20261124-081411 | 7/7 closed, 0 tokens, 0 LLM calls. Warm cache: 25 sweep requests, 7 findings, 7 cached fixes in 6.5–7.4 s, 9/9 health. Copied to `matches/sample.jsonl`. |
+| live-20261124-203557 | LLM-only (`strategy: llm`, cold): 3/4 closed. Red 67,659 tokens / 75 calls, Blue 8,236 / 6. No refusals; Red used its whole 25-step budget in all 3 rounds. |
+| live-20261124-204817 | LLM-only repeat: 3/4 closed. Red 67,230 tokens / 75 calls, Blue 8,113 / 6. Same shape as the run above. |
+| live-20261125-140157 / -140948 / -141846 | Warm-cache 7-class matches: 7/7 closed each, 0 LLM calls, 0 tokens, fixes in 6.6–9.1 s, 9/9 health. These three are the per-class 3-run sample. |
 
-Still to record: pass rate per class over 3 runs, refusal rate, tokens per match with the budget guard on.
+Measured numbers (Nov 25):
+
+- **Per-class pass rate over 3 runs:** all seven classes closed in each of the last three complete
+  matches (`live-20261125-140157`, `-140948`, `-141846`) — 7/7 × 3, 0 LLM calls, 0 tokens.
+- **Refusal rate:** 0 of 150 Red model replies ended the loop early in the two LLM-only runs (a
+  text-only reply stops the loop; both runs instead exhausted the 25-step budget in all 3 rounds).
+- **Tokens per agent, all recorded matches:** Red 189,861 in 302 calls, Blue 69,914 in 83 calls where
+  the split is provable; 6 older runs (307,087 tokens) predate per-agent accounting and are reported
+  as `—` rather than guessed. Full table in `docs/AUDIT-2026-11-25.md`.
+- **Budget guard:** still to measure with a run that actually trips `ARENA_TOKEN_BUDGET` (the guard
+  itself is unit-tested).

@@ -164,8 +164,8 @@ def _run_tool(call, base_url, openapi, emit, found, logins, owners) -> str:
             ex = Exploit(args.get("method", "GET"), path, args.get("headers"), args.get("params"),
                          args.get("json"), flag, classify(path, args.get("params")), login)
             found[flag] = ex
-            emit({"type": "breach", "route": normalize_route(path), "vuln_class": ex.vuln_class,
-                  "flag": flag, "method": ex.method, "path": path,
+            emit({"type": "breach", "source": "llm", "route": normalize_route(path),
+                  "vuln_class": ex.vuln_class, "flag": flag, "method": ex.method, "path": path,
                   **({"params": ex.params} if ex.params else {}),
                   **({"json": ex.json} if ex.json else {})})
     note = f"\nFLAGS FOUND: {', '.join(flags)}" if flags else ""
