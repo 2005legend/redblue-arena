@@ -5,6 +5,13 @@ Compute 50 hackathon, Round 1, Domain 9 (Developer Productivity and Intelligent 
 ## 🎬 Demo video
 
 **[▶ Watch the demo video](https://drive.google.com/file/d/1NGZk-LoY5xjeKkrgJkz0fmTmBSfkw-JY/view?usp=sharing)**
+
+![Vibe Arena architecture](docs/img/architecture.png)
+
+*One picture, the whole system: the sandbox boots a real copy of the FastAPI target, Red probes it
+(deterministic sweep, then LLM), Blue writes SEARCH/REPLACE patches on staging, and the referee only
+accepts a fix when 100% of the frozen tests pass and the exact exploit replay is blocked. Accepted
+fixes are cached and re-verified next match at 0 tokens.*
 — a cold-cache live match: the Red agent attacks a real FastAPI storefront, the Blue agent writes
 and verifies source patches in seconds, and the judge sees every exploit replay get `BLOCKED` inside
 the arena.
