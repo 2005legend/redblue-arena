@@ -105,7 +105,32 @@ a Tier-1/Tier-2 strip, and the **live victim site** — the real storefront embe
 after each accepted patch. `--replay` re-streams a recorded match with no API key, so judges can
 reproduce the demo offline; dashboard insights, patches and reports are read-only JSON APIs.
 
-## Run it
+## Judges: run everything with one script (Windows)
+
+The demo target (`fixtures/demo_shop`, Lumen Goods — FastAPI + SQLite) is **built in and set as the
+default**, so there is nothing to configure. Double-click:
+
+| Script | What it does |
+|---|---|
+| **`run_arena.bat`** | One-click: creates the venv, installs dependencies, seeds the demo site, optionally runs the 99-test suite, then starts the server (8765) and the UI (5173) and opens your browser. **No API key needed** — the replay mode shows a full recorded match. |
+| `run_tests.bat` | Just the pytest suite. |
+| `demo_cold_llm.bat` | The live-LLM proof: deletes the patch cache and runs a cold match where Blue's model writes fresh patches from scratch. Needs an API key. |
+
+To use **your own API key**, open the `.env` that `run_arena.bat` created and set:
+
+```
+ARENA_API_KEY=sk-...
+ARENA_BASE_URL=https://api.openai.com/v1     # optional; any OpenAI-compatible endpoint
+```
+
+That's the entire configuration. To point the arena at **any other FastAPI app**, copy
+`arena.yaml`, edit `app_dir` + `seed_db` + the login/route fields (see "Pointing it at another
+FastAPI app" below), and start the server with `ARENA_CONFIG=<your>.yaml`.
+
+Without a key the UI still lets judges watch a real recorded match end to end (zero-dependency
+replay), run the manual probes on the live site, and read reports, patches and the dashboard.
+
+## Run it manually
 
 ```powershell
 python -m venv .venv
