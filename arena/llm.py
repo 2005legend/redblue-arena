@@ -4,6 +4,7 @@ Model choice, highest priority first:
   1. ARENA_<ROLE>_MODEL in the environment pins ONE model (bypasses routing).
   2. models.yaml (or ARENA_MODELS_FILE): an ordered candidate list per role.
   3. ARENA_MODEL, then a built-in default.
+The model file may also set `base_url` and `api_key_env`; ARENA_BASE_URL / ARENA_API_KEY win.
 If a model errors (rate limit, timeout, bad gateway) or returns an empty reply, the next candidate
 is tried and the failed one rests for `cooldown` seconds.
 
@@ -37,20 +38,34 @@ def load_env(path=".env") -> None:
             os.environ.setdefault(key.strip(), value)
 
 
-def load_routes(path) -> dict:
+def load_config(path) -> dict:
     p = Path(path)
     if not p.is_file():
         return {}
-    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+
+
+def load_routes(path) -> dict:
+    data = load_config(path)
     return {role: list(models) for role, models in (data.get("roles") or {}).items()}
+
+
+def resolve_provider(path) -> tuple[str | None, str | None]:
+    """Base URL and key: environment wins, then non-secret base_url / api_key_env from the model file."""
+    data = load_config(path)
+    base_url = os.environ.get("ARENA_BASE_URL") or data.get("base_url")
+    api_key = os.environ.get("ARENA_API_KEY")
+    if not api_key and data.get("api_key_env"):
+        api_key = os.environ.get(data["api_key_env"])
+    return base_url, api_key
 
 
 class OpenAIClient:
     """One chat call against the configured provider. Returns (message_dict, tokens_used)."""
 
-    def __init__(self):
-        self._c = OpenAI(base_url=os.environ.get("ARENA_BASE_URL") or None,
-                         api_key=os.environ.get("ARENA_API_KEY", "missing"),
+    def __init__(self, base_url=None, api_key=None):
+        self._c = OpenAI(base_url=base_url or os.environ.get("ARENA_BASE_URL") or None,
+                         api_key=api_key or os.environ.get("ARENA_API_KEY", "missing"),
                          timeout=90, max_retries=1)
 
     def complete(self, model, messages, tools):
@@ -66,12 +81,17 @@ class OpenAIClient:
 
 
 class LLM:
-    def __init__(self, role: str, models: list | None = None, client=None, cooldown: float = 60,
+    def __init__(self, role: str, models: list | None = None, client=None, cooldown: float | None = None,
                  token_budget: int | None = None):
         load_env()
+        if cooldown is None:
+            cooldown = float(os.environ.get("ARENA_MODEL_COOLDOWN") or 60)
         self.role, self.cooldown = role, cooldown
         self.models = models or self._resolve(role)
-        self._client = client or OpenAIClient()
+        if client is None:
+            base_url, api_key = resolve_provider(os.environ.get("ARENA_MODELS_FILE", "models.yaml"))
+            client = OpenAIClient(base_url=base_url, api_key=api_key)
+        self._client = client
         self.token_budget = (token_budget if token_budget is not None
                              else int(os.environ.get("ARENA_TOKEN_BUDGET") or 0))
         self._rest_until: dict[str, float] = {}

@@ -11,6 +11,7 @@ def export_all(authorization: str | None = Header(default=None)):
     current_user(authorization)
     conn = get_conn()
     users = [dict(r) for r in conn.execute("SELECT id, username, role FROM users")]
-    notes = [dict(r) for r in conn.execute("SELECT key, value FROM config")]
+    notes = [dict(r) for r in conn.execute(
+        "SELECT key, value FROM config WHERE key = 'export_note'")]
     conn.close()
     return {"users": users, "config": notes}

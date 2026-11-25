@@ -7,21 +7,27 @@ import {
   Server,
   FileText,
   KeyRound,
-  Route
+  Route,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
-import { getTargetConfig, TargetStatus } from '../services/api';
+import { getTargetConfig, getTargetLive, TargetStatus, TargetLive } from '../services/api';
 
 const VECTORS = [
   { id: 'sqli', name: 'SQL Injection', key: 'sqli' },
   { id: 'idor', name: 'IDOR', key: 'idor' },
   { id: 'path_traversal', name: 'Path Traversal', key: 'path_traversal' },
   { id: 'admin_auth', name: 'Admin Auth Bypass', key: 'admin_auth' },
+  { id: 'mass_assignment', name: 'Mass Assignment', key: 'mass_assignment' },
+  { id: 'debug_exposure', name: 'Debug Endpoint Exposure', key: 'debug_exposure' },
+  { id: 'code_injection', name: 'Code Injection (eval)', key: 'code_injection' },
 ];
 
 export const TargetAppPage: React.FC = () => {
   const [config, setConfig] = useState<TargetStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState<TargetLive | null>(null);
 
   const loadConfig = async () => {
     setLoading(true);
@@ -39,6 +45,24 @@ export const TargetAppPage: React.FC = () => {
     loadConfig();
     const interval = setInterval(loadConfig, 8000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const l = await getTargetLive();
+        if (!stop) setLive(l);
+      } catch {
+        if (!stop) setLive(null);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 3000);
+    return () => {
+      stop = true;
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -81,6 +105,55 @@ export const TargetAppPage: React.FC = () => {
           <ShieldAlert className="w-4 h-4" /> {error}
         </div>
       )}
+
+      {/* The real storefront, straight from the sandbox port the red agent is hitting */}
+      <div className="rounded-xl bg-[#090d18] border border-slate-800 overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-slate-800">
+          <div className="flex items-center space-x-2">
+            <Globe className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-xs font-mono font-semibold text-cyan-400 uppercase tracking-wider">
+              Live Victim Site
+            </h3>
+            <span className="text-[10px] font-mono text-slate-500">/target</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+              live?.alive
+                ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                : 'bg-slate-900 text-slate-400 border-slate-700'
+            }`}>
+              {live?.alive ? `TARGET LIVE :${live.port}` : 'OFFLINE'}
+            </span>
+            {live?.url && (
+              <a
+                href={live.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] font-mono px-2 py-0.5 rounded border border-cyan-800 bg-cyan-950 text-cyan-300 hover:bg-cyan-900 flex items-center gap-1"
+              >
+                open <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        </div>
+        {live?.alive && live.url ? (
+          <iframe
+            src={live.url}
+            title="MiniShop victim site"
+            sandbox="allow-scripts allow-forms allow-same-origin"
+            className="w-full h-[560px] bg-[#f6f4ee]"
+          />
+        ) : (
+          <div className="h-40 flex flex-col items-center justify-center gap-1 text-center px-6">
+            <p className="text-xs font-mono text-slate-400">
+              No target is running right now.
+            </p>
+            <p className="text-[11px] font-mono text-slate-600">
+              Start a battle and the real storefront appears here while it is under attack.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Patch status, derived from the latest recorded match */}
       <div className="p-4 rounded-xl bg-[#090d18] border border-slate-800">

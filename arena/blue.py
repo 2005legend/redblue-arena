@@ -16,7 +16,12 @@ SYSTEM = (
     "still use admin routes). Do not delete routes and do not reject everyone. Reply ONLY with "
     "one or more edit blocks in exactly this format, copying SEARCH text exactly from the files:\n\n"
     "FILE: app/routes/example.py\n<<<<<<< SEARCH\n(existing lines)\n=======\n(replacement lines)\n"
-    ">>>>>>> REPLACE"
+    ">>>>>>> REPLACE\n\n"
+    "Rules: keep SEARCH to the few lines that actually change. If SEARCH includes a decorator "
+    "such as @router.get(...) or a def line, REPLACE must include it unchanged. Never put code "
+    "after <<<<<<< on the same line, and never repeat the first line inside the block. "
+    "One reply may contain several edit blocks: if your fix needs a new import, add the import "
+    "with a second block in the SAME reply, or the target will fail to boot."
 )
 
 # Always shown: the request path usually runs through auth and the router.
@@ -43,6 +48,28 @@ RECIPES = {
         "anything outside it, e.g. base = Path(\"files\").resolve(); "
         "path = (base / name).resolve(); if base not in path.parents: "
         "raise HTTPException(404, \"not found\")."
+    ),
+    "mass_assignment": (
+        "Recipe (mass assignment): delete the block that copies body.role into the users row. "
+        "SEARCH those exact lines and REPLACE with a comment such as `# role is not "
+        "client-writable`, so a display-name update still returns 200. Never take role/is_admin "
+        "from the request body, and do not raise: no new imports are needed."
+    ),
+    "debug_exposure": (
+        "Recipe (unauthenticated debug endpoint): require a logged-in admin before returning debug "
+        "data. The file only imports APIRouter today, so add `Header` to the fastapi import, "
+        "`from app.routes.auth import current_user`, and `HTTPException` if you raise one. Keep the "
+        "@router decorator and change the handler to "
+        "def debug_config(authorization: str | None = Header(default=None)): user = "
+        "current_user(authorization); if user[\"role\"] != \"admin\": raise HTTPException(403, "
+        "\"admin only\"). Admins must still receive the same response shape."
+    ),
+    "code_injection": (
+        "Recipe (code injection): never call eval(). Parse with ast.parse(expr, mode=\"eval\") and "
+        "walk the tree: allow only Expression, Constant int/float, UnaryOp with USub/UAdd, and BinOp "
+        "with Add/Sub/Mult/Div, applying operator.add/sub/mul/truediv. Raise HTTPException(400) for "
+        "anything else. Add `import ast` and `import operator` at the top in the same reply. Keep "
+        "2*(3+4) returning 14."
     ),
 }
 
@@ -72,11 +99,38 @@ class BlueResult:
     cached: bool = False
 
 
+_LOOSE_START = re.compile(r"(?m)^[ \t]*<{7}[ \t]+(?!SEARCH\b)(\S.*)$")
+# The same model often repeats that first line right after the marker; collapse the copy.
+_LOOSE_DUP = re.compile(r"(?m)^[ \t]*<{7}[ \t]+(?!SEARCH\b)(\S.*)\n\1\n")
+
+
+def _loosen_start_marker(text: str) -> str:
+    """Some models write `<<<<<<< <first search line>` instead of `<<<<<<< SEARCH` on its own line."""
+    text = _LOOSE_DUP.sub(r"<<<<<<< SEARCH\n\1\n", text)
+    return _LOOSE_START.sub(r"<<<<<<< SEARCH\n\1", text)
+
+
+def _keep_decorator(edit: Edit) -> Edit:
+    """Models quote `@router...` in SEARCH then drop it from REPLACE, which unregisters the route."""
+    lines = edit.search.splitlines()
+    decorators = []
+    while lines and lines[0].lstrip().startswith("@"):
+        decorators.append(lines.pop(0))
+    if decorators and not edit.replace.lstrip().startswith("@"):
+        return Edit(edit.path, "\n".join(lines), edit.replace)
+    return edit
+
+
 def parse_edits(text: str) -> list[Edit]:
+    text = text or ""
+    matches = EDIT_RE.findall(text)
+    if not matches:
+        matches = EDIT_RE.findall(_loosen_start_marker(text))
     edits = []
-    for path, search, replace in EDIT_RE.findall(text or ""):
-        edits.append(Edit(path, search.replace("\r\n", "\n"),
-                          replace[:-1] if replace.endswith("\n") else replace))
+    for path, search, replace in matches:
+        edit = Edit(path, search.replace("\r\n", "\n"),
+                    replace[:-1] if replace.endswith("\n") else replace)
+        edits.append(_keep_decorator(edit))
     return edits
 
 

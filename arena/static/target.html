@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live Target — MiniShop under attack</title>
+<style>
+  :root {
+    --bg: #070b12;
+    --panel: rgba(9, 14, 22, .88);
+    --line: #1e2b3a;
+    --ink: #dbe7f3;
+    --muted: #7d8fa3;
+    --red: #ff5d5d;
+    --blue: #58a6ff;
+    --green: #3ddc97;
+    --amber: #f5b642;
+    --hud: 46px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); overflow: hidden;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .hud {
+    height: var(--hud); display: flex; align-items: center; gap: 14px; padding: 0 16px;
+    background: #0a1119; border-bottom: 1px solid var(--line);
+    font-size: 12px; position: relative; z-index: 4;
+  }
+  .title { font-weight: 800; letter-spacing: .10em; text-transform: uppercase; font-size: 11px; color: #93a9bf; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--line); font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+    color: var(--muted); background: #0d1620;
+  }
+  .pill.live { color: var(--green); border-color: #1d5a41; background: #0a1b14; }
+  .pill.dead { color: var(--red); border-color: #5a1f1f; background: #1b0d0d; }
+  .lamp { width: 8px; height: 8px; border-radius: 50%; background: #3a4b5e; }
+  .pill.live .lamp { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 1.6s infinite; }
+  .pill.dead .lamp { background: var(--red); }
+  @keyframes blink { 50% { opacity: .35; } }
+  .spacer { flex: 1; }
+  .score { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .score b.red { color: var(--red); }
+  .score b.blue { color: var(--blue); }
+  .url { color: #66788c; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+  .url a { color: #8fb6d9; text-decoration: none; }
+  .url a:hover { text-decoration: underline; }
+
+  .stage { position: absolute; inset: var(--hud) 0 0 0; }
+  iframe { width: 100%; height: 100%; border: 0; background: #f6f4ee; display: block; }
+  .blank {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; text-align: center;
+    background: radial-gradient(circle at 50% 35%, #101a26, #070b12 70%);
+  }
+  .blank.hidden { display: none; }
+  .blank h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+  .blank p { margin: 0; color: var(--muted); font-size: 13px; max-width: 46ch; line-height: 1.6; }
+  .blank code {
+    background: #0d1620; border: 1px solid var(--line); padding: 2px 6px; border-radius: 5px;
+    font-size: 12px; color: #9fc4e6;
+  }
+
+  .feed {
+    position: fixed; right: 16px; bottom: 16px; width: 430px; max-width: calc(100vw - 32px);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    backdrop-filter: blur(10px); box-shadow: 0 18px 50px rgba(0,0,0,.55);
+    overflow: hidden; z-index: 5;
+  }
+  .feed-head {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    border-bottom: 1px solid var(--line); background: #0b131d;
+    font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #8ba0b6;
+  }
+  .feed-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: blink 1.2s infinite; }
+  .feed-body { max-height: 300px; overflow: auto; padding: 6px; }
+  .ev {
+    display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: start;
+    padding: 5px 7px; border-radius: 7px; font-size: 11.5px; line-height: 1.4;
+  }
+  .ev + .ev { border-top: 1px solid #121c27; }
+  .ev .t { font-family: ui-monospace, Consolas, monospace; color: #5d6f83; font-size: 10px; padding-top: 2px; }
+  .ev .m { color: #b9c9d9; word-break: break-word; }
+  .ev.red .m { color: #ffb3b3; }
+  .ev.breach { background: #1d0d0d; }
+  .ev.breach .m { color: #ff8a8a; font-weight: 600; }
+  .ev.blue .m { color: #a9cdf5; }
+  .ev.ok { background: #0b1a14; }
+  .ev.ok .m { color: #79e0b4; }
+  .ev.score .m { color: #e8eef5; font-weight: 700; font-family: ui-monospace, Consolas, monospace; }
+  .ev.info .m { color: #8ba0b6; }
+
+  .attack-flash {
+    position: fixed; inset: var(--hud) 0 0 0; pointer-events: none; z-index: 3;
+    box-shadow: inset 0 0 0 3px rgba(255, 60, 60, .9), inset 0 0 90px rgba(255, 40, 40, .28);
+    opacity: 0; transition: opacity .25s ease;
+  }
+  .attack-flash.on { opacity: 1; }
+  .attack-flash.ok { box-shadow: inset 0 0 0 3px rgba(60, 220, 140, .9), inset 0 0 90px rgba(40, 220, 140, .22); }
+  .ribbon {
+    position: fixed; top: calc(var(--hud) + 12px); left: 50%; transform: translateX(-50%);
+    padding: 7px 16px; border-radius: 999px; z-index: 5;
+    background: #2a0b0b; border: 1px solid #7a1f1f; color: #ffb4b4;
+    font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+    opacity: 0; transition: opacity .25s ease; max-width: 90%; text-align: center;
+  }
+  .ribbon.on { opacity: 1; }
+  .ribbon.ok { background: #06231a; border-color: #1d5a41; color: #79e0b4; }
+
+  /* Compact mode for the small panel embedded in the arena page: no feed (the arena already
+     streams the same events), just the real site with its attack glow. */
+  body.embed { --hud: 36px; }
+  body.embed .feed { display: none; }
+  body.embed .hud { font-size: 11px; gap: 8px; padding: 0 10px; white-space: nowrap; }
+  body.embed .hud .title,
+  body.embed .hud .url,
+  body.embed .hud .score { display: none; }  /* the arena already shows the URL and the score */
+  body.embed .blank h1 { font-size: 15px; }
+  body.embed .blank p { font-size: 12px; max-width: 34ch; }
+  body.embed .ribbon { font-size: 10px; padding: 5px 12px; }
+</style>
+</head>
+<body>
+  <div class="hud">
+    <span class="title">Live victim</span>
+    <span class="pill dead" id="status"><span class="lamp"></span><span id="status-text">WAITING</span></span>
+    <span class="url" id="url">no target running</span>
+    <span class="spacer"></span>
+    <span class="score">RED <b class="red" id="sr">0</b> &nbsp;·&nbsp; BLUE <b class="blue" id="sb">0</b></span>
+    <span class="pill" id="matchpill"><span class="lamp"></span><span id="match-text">idle</span></span>
+  </div>
+
+  <div class="stage">
+    <iframe id="frame" title="MiniShop victim site" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
+    <div class="blank" id="blank">
+      <h1>No target is live yet</h1>
+      <p>Start a battle from the arena and this pane will show the real <strong>MiniShop</strong> storefront being
+         attacked. Every request on the right is a request the red agent actually made against the site in the iframe.</p>
+      <p><code>POST /api/match/start</code> or click <strong>New Battle</strong> in the arena.</p>
+    </div>
+  </div>
+
+  <div class="attack-flash" id="flash"></div>
+  <div class="ribbon" id="ribbon">Canary captured — data exfiltrated</div>
+
+  <div class="feed">
+    <div class="feed-head"><span class="dot"></span> Live attack feed <span class="spacer" style="flex:1"></span><span id="feedcount" style="color:#5d6f83"></span></div>
+    <div class="feed-body" id="feed"></div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var frame = document.getElementById("frame");
+  var blank = document.getElementById("blank");
+  var statusPill = document.getElementById("status");
+  var statusText = document.getElementById("status-text");
+  var urlEl = document.getElementById("url");
+  var matchPill = document.getElementById("matchpill");
+  var matchText = document.getElementById("match-text");
+  var sr = document.getElementById("sr");
+  var sb = document.getElementById("sb");
+  var feed = document.getElementById("feed");
+  var feedCount = document.getElementById("feedcount");
+  var flash = document.getElementById("flash");
+  var ribbon = document.getElementById("ribbon");
+
+  var currentUrl = null;
+  var alive = false;
+  var count = 0;
+  var flashTimer = null;
+  var frameReady = false;
+  var pending = [];      // replay messages waiting for the storefront document to finish loading
+  var exploits = {};     // vuln_class -> the last request Red used, replayed after the fix lands
+  var lastHealth = null;
+
+  var EMBED = /[?&]embed=1\b/.test(location.search);
+  if (EMBED) document.body.classList.add("embed");
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function setAlive(ok, url) {
+    alive = ok;
+    if (url && url !== currentUrl) {
+      currentUrl = url;
+      frameReady = false;
+      frame.src = url;
+    }
+    blank.classList.toggle("hidden", ok);
+    statusPill.className = "pill " + (ok ? "live" : "dead");
+    statusText.textContent = ok ? "TARGET LIVE" : "OFFLINE";
+    urlEl.innerHTML = url
+      ? '<a href="' + esc(url) + '" target="_blank" rel="noreferrer">' + esc(url) + '</a>'
+      : "no target running";
+  }
+
+  // --- Relay: the storefront replays the exact request Red made --------------------------
+  // The storefront (index.html) listens for {type:'arena:replay'} and re-issues that request
+  // with its own session, so the audience watches the real site leak the canary instead of
+  // reading a log line. Messages are queued until the iframe document is loaded, because a
+  // replay posted into a page that has not booted yet is simply lost.
+  function postReplay(payload) {
+    pending.push(payload);
+    flushReplays();
+  }
+
+  function flushReplays() {
+    if (!frameReady || !currentUrl || !frame.contentWindow) return;
+    while (pending.length) {
+      try {
+        frame.contentWindow.postMessage(pending.shift(), "*");
+      } catch (err) {
+        pending.length = 0;
+      }
+    }
+  }
+
+  frame.addEventListener("load", function () {
+    frameReady = true;
+    flushReplays();
+  });
+
+  function rememberExploit(e) {
+    if (!e.vuln_class || !e.path) return null;
+    var ex = { method: e.method || "GET", path: e.path, vuln_class: e.vuln_class };
+    if (e.params) ex.params = e.params;
+    if (e.json) ex.json = e.json;
+    exploits[e.vuln_class] = ex;
+    return ex;
+  }
+
+  function addEvent(cls, text) {
+    var row = document.createElement("div");
+    row.className = "ev " + cls;
+    var now = new Date();
+    var t = String(now.getHours()).padStart(2, "0") + ":" +
+            String(now.getMinutes()).padStart(2, "0") + ":" +
+            String(now.getSeconds()).padStart(2, "0");
+    row.innerHTML = '<span class="t">' + t + '</span><span class="m">' + esc(text) + '</span>';
+    feed.insertBefore(row, feed.firstChild);
+    while (feed.children.length > 60) feed.removeChild(feed.lastChild);
+    count++;
+    feedCount.textContent = count + " events";
+  }
+
+  function pulseAttack(text, ok) {
+    flash.classList.add("on");
+    flash.classList.toggle("ok", !!ok);
+    if (text) {
+      ribbon.textContent = text;
+      ribbon.classList.add("on");
+      ribbon.classList.toggle("ok", !!ok);
+    }
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () {
+      flash.classList.remove("on");
+      flash.classList.remove("ok");
+      ribbon.classList.remove("on");
+      ribbon.classList.remove("ok");
+    }, ok ? 2600 : 3200);
+  }
+
+  function describe(e) {
+    switch (e.type) {
+      case "target_live":   return ["info", "target online on port " + e.port];
+      case "target_down":   return ["info", "target shut down"];
+      case "match_start":   return ["info", "match started (" + (e.strategy || "hybrid") + ")"];
+      case "health":        return ["info", "health check " + e.passed + "/" + ((e.passed || 0) + (e.failed || 0)) + " passing"];
+      case "red_action": {
+        var a = e.args || {};
+        var line = (a.method ? a.method + " " : "") + (a.path || e.tool || "probe");
+        if (a.params && a.params.q) line += "  q=" + JSON.stringify(a.params.q);
+        if (e.status) line += "  → " + e.status;
+        return ["red", line];
+      }
+      case "breach":
+        return ["breach", (e.vuln_class || "leak") + " · " + e.route + " · " + e.flag];
+      case "blue_thinking":
+        return ["blue", "Blue is reading the handler and drafting a patch"];
+      case "blue_attempt": {
+        var why = e.ok ? "verified by the referee" : String(e.reason || "rejected").split("\n")[0];
+        return ["blue", "patch attempt " + e.n + ": " + why];
+      }
+      case "patched":
+        return ["ok", (e.vuln_class || "fix") + " verified in " + e.ttp_seconds + "s" + (e.cached ? " (cache)" : "")];
+      case "score":
+        return ["score", "RED " + e.red + "  —  BLUE " + e.blue];
+      case "match_end": {
+        var s = e.summary || {};
+        return ["ok", "verdict — red " + (s.red || 0) + ", blue " + (s.blue || 0) + ", closed " + (s.closed || 0) + "/" + (s.total || 0)];
+      }
+      default:
+        return null;
+    }
+  }
+
+  function onEvent(e) {
+    // Backlog events are history: keep them in the feed, but never replay a past attack inside
+    // the page or pulse the screen for something that did not just happen.
+    var live = !e.backlog;
+    if (e.type === "score") { sr.textContent = e.red; sb.textContent = e.blue; }
+    if (e.type === "target_live") setAlive(true, e.url);
+    if (e.type === "target_down") setAlive(false, null);
+    if (e.type === "match_start") { matchText.textContent = "running"; matchPill.className = "pill live"; }
+    if (e.type === "match_end") {
+      matchText.textContent = "concluded";
+      matchPill.className = "pill";
+      var s = e.summary || {};
+      if (live) {
+        pulseAttack("verdict — red " + (s.red || 0) + ", blue " + (s.blue || 0) +
+                    ", closed " + (s.closed || 0) + "/" + (s.total || 0), true);
+      }
+    }
+    if (e.type === "breach") {
+      // Replay the exact request Red made against the real site in the iframe.
+      var hit = rememberExploit(e);
+      if (live) {
+        pulseAttack("canary captured — " + (e.vuln_class || "leak") + " on the live site");
+        if (hit) {
+          postReplay({ type: "arena:replay", verify: false, method: hit.method, path: hit.path,
+                       params: hit.params, json: hit.json, vuln_class: hit.vuln_class });
+        }
+      }
+    }
+    if (e.type === "patched" && live) {
+      // The patched target is already loading in the iframe; re-send the same exploit so the
+      // site itself shows it is now refused. Queued until that page has booted.
+      var ex = exploits[e.vuln_class];
+      if (ex) {
+        postReplay({ type: "arena:replay", verify: true, method: ex.method, path: ex.path,
+                     params: ex.params, json: ex.json, vuln_class: ex.vuln_class });
+        pulseAttack((e.vuln_class || "fix") + " refused by the patched site — referee verified", true);
+      }
+    }
+    if (e.type === "health") {
+      var h = e.passed + "/" + ((e.passed || 0) + (e.failed || 0));
+      if (h === lastHealth) return;   // the same 9/9 repeated is noise, not a new fact
+      lastHealth = h;
+    }
+    var d = describe(e);
+    if (d) addEvent(d[0], d[1]);
+  }
+
+  function connect() {
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var ws;
+    try { ws = new WebSocket(proto + "//" + location.host + "/ws"); }
+    catch (err) { return; }
+    ws.onmessage = function (msg) {
+      try { onEvent(JSON.parse(msg.data)); } catch (err) {}
+    };
+    ws.onclose = function () {
+      matchText.textContent = "disconnected";
+      matchPill.className = "pill dead";
+    };
+  }
+  connect();
+
+  // Polling keeps the iframe correct even if we connect mid-match, miss an event,
+  // or the socket closes at match_end (it returns after the verdict).
+  async function poll() {
+    try {
+      var res = await fetch("/api/target/live", { cache: "no-store" });
+      var j = await res.json();
+      if (j.url && j.alive) setAlive(true, j.url);
+      else setAlive(false, null);
+    } catch (err) { /* server restarting; next tick */ }
+  }
+  poll();
+  setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>

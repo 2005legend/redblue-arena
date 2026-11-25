@@ -12,7 +12,7 @@ from arena.exporter import export
 from arena.llm import BudgetExceeded
 from arena.red import normalize_route, run_red
 from arena.referee import find_flags, replay, run_functional_tests
-from arena.sandbox import PortAllocator, TargetProcess
+from arena.sandbox import KEPT, PortAllocator, TargetProcess, stop_kept
 from arena.sweep import Sweep, should_run_llm
 
 
@@ -30,21 +30,29 @@ class MatchSummary:
     sweep_requests: int = 0
     llm_calls: int = 0
     cache_hits: int = 0
+    red_tokens: int = 0
+    blue_tokens: int = 0
+    red_llm_calls: int = 0
+    blue_llm_calls: int = 0
 
 
 def run_match(cfg, llm_red, llm_blue, log: EventLog, rounds: int = 3, work_root: Path = Path("work"),
               out_dir: Path = Path("matches/last"), base_port: int = 8001,
               strategy: str | None = None, explore: bool = False,
-              cache_path: Path | None = None) -> MatchSummary:
+              cache_path: Path | None = None, keep_target: bool = False) -> MatchSummary:
     emit = log.emit
     strategy = strategy or cfg.strategy
     cache_path = cfg.cache_path if cache_path is None else cache_path
+    # A target kept alive from an earlier demo match would hold its port (and the
+    # allow-list entry), so clear those before allocating new ones.
+    stop_kept()
     ports = PortAllocator(base_port)
     work_root, out_dir = Path(work_root), Path(out_dir)
     live = TargetProcess(cfg.app_dir, cfg.seed_db, ports.next(), work_root, cfg.app_module,
                        cfg.extra_paths)
     live.prepare()
     live.start()
+    emit({"type": "target_live", "url": live.url, "port": live.port})
     summary = MatchSummary(first_port=live.port)
     exploits_closed, patches, ttps = [], [], []
     seen_routes: set[tuple[str, str]] = set()
@@ -103,6 +111,7 @@ def run_match(cfg, llm_red, llm_blue, log: EventLog, rounds: int = 3, work_root:
                         summary.cache_hits += 1
                     old, live = live, res.new_target
                     old.stop()
+                    emit({"type": "target_live", "url": live.url, "port": live.port})
                     ttp = round(time.time() - start, 1)
                     summary.blue += 1
                     summary.closed += 1
@@ -118,11 +127,22 @@ def run_match(cfg, llm_red, llm_blue, log: EventLog, rounds: int = 3, work_root:
         except BudgetExceeded as exc:  # still export what was closed before the budget ran out
             emit({"type": "budget_exceeded", "error": str(exc)})
         summary.final_port = live.port
-        summary.tokens = getattr(llm_red, "tokens_used", 0) + getattr(llm_blue, "tokens_used", 0)
-        summary.llm_calls = getattr(llm_red, "calls", 0) + getattr(llm_blue, "calls", 0)
+        summary.red_tokens = getattr(llm_red, "tokens_used", 0)
+        summary.blue_tokens = getattr(llm_blue, "tokens_used", 0)
+        summary.red_llm_calls = getattr(llm_red, "calls", 0)
+        summary.blue_llm_calls = getattr(llm_blue, "calls", 0)
+        summary.tokens = summary.red_tokens + summary.blue_tokens
+        summary.llm_calls = summary.red_llm_calls + summary.blue_llm_calls
         export(out_dir, exploits_closed, patches, ttps)
+        # Emit this before match_end: consumers (and tests) treat match_end as the
+        # terminal event. In demo mode the target is kept alive instead.
+        if not keep_target:
+            emit({"type": "target_down", "port": live.port})
         emit({"type": "match_end", "summary": summary.__dict__,
               "files": ["hardened.patch", "report.md"]})
     finally:
-        live.stop()
+        if keep_target and live.running:
+            KEPT.append(live)  # demo mode: leave the victim site browsable after the verdict
+        else:
+            live.stop()
     return summary

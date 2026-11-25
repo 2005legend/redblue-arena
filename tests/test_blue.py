@@ -53,6 +53,35 @@ def test_parse_and_apply_edit(tmp_path):
     assert f.read_text() == "a = 9\nb = 2\n"
 
 
+def test_parse_accepts_search_text_on_the_marker_line():
+    # mistral-code-latest writes `<<<<<<< def search(...)` instead of a bare SEARCH marker.
+    text = ("FILE: app/x.py\n<<<<<<< def f():\n    return 1\n=======\ndef f():\n    return 2\n"
+            ">>>>>>> REPLACE\n")
+    edits = parse_edits(text)
+    assert len(edits) == 1
+    assert edits[0].search == "def f():\n    return 1"
+    assert edits[0].replace == "def f():\n    return 2"
+
+
+def test_parse_collapses_the_line_the_model_repeats_after_the_marker():
+    text = ("FILE: app/x.py\n<<<<<<< def f():\ndef f():\n    return 1\n=======\ndef f():\n"
+            "    return 2\n>>>>>>> REPLACE\n")
+    edits = parse_edits(text)
+    assert len(edits) == 1 and edits[0].search == "def f():\n    return 1"
+
+
+def test_parse_keeps_the_route_decorator_when_replace_drops_it(tmp_path):
+    (tmp_path / "app").mkdir()
+    f = tmp_path / "app" / "x.py"
+    f.write_text('@router.get("/x")\ndef f():\n    return 1\n')
+    text = ('FILE: app/x.py\n<<<<<<< SEARCH\n@router.get("/x")\ndef f():\n    return 1\n'
+            '=======\ndef f():\n    return 2\n>>>>>>> REPLACE\n')
+    edits = parse_edits(text)
+    assert edits[0].search == "def f():\n    return 1"
+    apply_edits(tmp_path, edits)
+    assert f.read_text() == '@router.get("/x")\ndef f():\n    return 2\n'
+
+
 def test_apply_crlf_tolerant(tmp_path):
     (tmp_path / "app").mkdir()
     f = tmp_path / "app" / "x.py"
@@ -231,3 +260,9 @@ def test_stale_cached_fix_is_dropped_and_redone_by_the_llm(tmp_path):
         res.new_target.stop()
     finally:
         live.stop()
+
+
+def test_every_vulnerability_class_has_a_blue_recipe_and_metadata():
+    from arena import site_api
+    from arena.blue import RECIPES
+    assert set(RECIPES) == set(site_api.VULN_META)

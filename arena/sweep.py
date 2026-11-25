@@ -1,8 +1,8 @@
 """Deterministic sweep: run the known-bad templates first, at zero tokens.
 
-The LLM Red agent is still the explore/combine path; this sweep only replays the four bug
-classes we always test (SQLi, IDOR, admin bypass, path traversal), so a match usually ends
-before the model is asked to think.
+The LLM Red agent is still the explore/combine path; this sweep only replays the bug classes
+we always test (SQLi, IDOR, admin bypass, path traversal, mass assignment, unauthenticated
+debug endpoint, code injection), so a match usually ends before the model is asked to think.
 """
 from arena.discover import find_login_path, normalize_route, routes
 from arena.httptool import HostLockError, send_request
@@ -11,6 +11,10 @@ from arena.referee import Exploit, find_flags, find_token
 
 ID_RANGE = range(1, 11)
 FILE_HINTS = ("file", "path", "name")
+DEBUG_HINTS = ("debug", "diagnostic")
+CODE_PARAM_HINTS = ("expr", "expression", "eval", "code", "cmd", "command")
+MASS_ASSIGN_PAYLOADS = ({"role": "admin"}, {"is_admin": True}, {"admin": True})
+CODE_PAYLOADS = ("[v for v in globals().values() if 'FLAG{' in str(v)]",)
 REQUEST_BUDGET = 120  # a sweep must never turn into a fuzzer
 
 
@@ -40,6 +44,9 @@ class Sweep:
         self._idor()
         self._admin()
         self._traversal()
+        self._mass_assignment()
+        self._debug()
+        self._code_injection()
         return list(self.findings.values())
 
     def _login(self):
@@ -153,6 +160,43 @@ class Sweep:
                         res = self._send("GET", route.path, params=params)
                         if self._record(res, "path_traversal", "GET", route.path, params=params):
                             return
+
+    def _mass_assignment(self):
+        """A PUT/PATCH body that accepts `role` lets a normal user promote themselves."""
+        if not self.token:
+            return
+        for route in self.routes:
+            if route.method not in ("PUT", "PATCH") or "{" in route.path:
+                continue
+            for payload in MASS_ASSIGN_PAYLOADS:
+                res = self._send(route.method, route.path, json=payload, headers=self.headers)
+                if self._record(res, "mass_assignment", route.method, route.path,
+                                json=payload, used_login=True):
+                    break
+
+    def _debug(self):
+        """Debug/diagnostic routes that answer without a token leak build secrets."""
+        for route in self.routes:
+            if route.method != "GET" or "{" in route.path:
+                continue
+            if not any(hint in route.path.lower() for hint in DEBUG_HINTS):
+                continue
+            res = self._send("GET", route.path)
+            self._record(res, "debug_exposure", "GET", route.path)
+
+    def _code_injection(self):
+        """Expression/code parameters evaluated server-side hand over module globals."""
+        for route in self.routes:
+            if route.method != "GET":
+                continue
+            for param in route.query_params():
+                if param.name.lower() not in CODE_PARAM_HINTS:
+                    continue
+                for payload in CODE_PAYLOADS:
+                    params = {param.name: payload}
+                    res = self._send("GET", route.path, params=params)
+                    if self._record(res, "code_injection", "GET", route.path, params=params):
+                        break
 
 
 def should_run_llm(strategy: str, findings: list, explore: bool = False) -> bool:

@@ -13,5 +13,8 @@ loot_paths: [secret.txt]
 attacker_users: [alice]
 flag_owners:
   FLAG{idor_invoice_leak}: bob
+  FLAG{mass_assignment_leak}: admin
+  FLAG{debug_config_leak}: admin
+  FLAG{code_injection_leak}: admin
 strategy: hybrid
 cache_path: patches/cache.json

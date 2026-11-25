@@ -7,8 +7,8 @@
       "edits": [
         {
           "path": "app/routes/invoices.py",
-          "search": "    sql = f\"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE '%{q}%'\"\n    try:\n        rows = conn.execute(sql).fetchall()",
-          "replace": "    sql = \"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE ?\"\n    try:\n        rows = conn.execute(sql, (f\"%{q}%\",)).fetchall()"
+          "search": "def search(q: str = \"\"):\n    conn = get_conn()\n    sql = f\"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE '%{q}%'\"\n    try:\n        rows = conn.execute(sql).fetchall()",
+          "replace": "def search(q: str = \"\"):\n    conn = get_conn()\n    sql = \"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE ?\"\n    try:\n        rows = conn.execute(sql, ('%' + q + '%',)).fetchall()"
         }
       ]
     },
@@ -18,8 +18,8 @@
       "edits": [
         {
           "path": "app/routes/invoices.py",
-          "search": "    current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ?\", (invoice_id,)",
-          "replace": "    user = current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ? AND owner_id = ?\",\n        (invoice_id, user[\"id\"])"
+          "search": "def get_invoice(invoice_id: int, authorization: str | None = Header(default=None)):\n    current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ?\", (invoice_id,)\n    ).fetchone()",
+          "replace": "def get_invoice(invoice_id: int, authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ? AND owner_id = ?\", (invoice_id, user[\"id\"])\n    ).fetchone()"
         }
       ]
     },
@@ -29,8 +29,8 @@
       "edits": [
         {
           "path": "app/routes/admin.py",
-          "search": "    current_user(authorization)\n    conn = get_conn()",
-          "replace": "    user = current_user(authorization)\n    assert user[\"role\"] == \"admin\", \"admin only\"\n    conn = get_conn()"
+          "search": "def export_all(authorization: str | None = Header(default=None)):\n    current_user(authorization)",
+          "replace": "def export_all(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    assert user[\"role\"] == \"admin\", \"admin only\""
         }
       ]
     },
@@ -40,8 +40,46 @@
       "edits": [
         {
           "path": "app/routes/files.py",
-          "search": "    path = Path(\"files\") / name\n    if not path.is_file():",
-          "replace": "    base = Path(\"files\").resolve()\n    path = (base / name).resolve()\n    if base not in path.parents or not path.is_file():"
+          "search": "    path = Path(\"files\") / name",
+          "replace": "    base = Path(\"files\").resolve()\n    path = (base / name).resolve()\n    if base not in path.parents:\n        raise HTTPException(404, \"not found\")"
+        }
+      ]
+    },
+    "c7f5a0e4818a670f49c305f5af341c687f2ca0a1b4fc1b6967ae6d4bf1ca14b7": {
+      "vuln_class": "debug_exposure",
+      "route": "/api/debug/config",
+      "edits": [
+        {
+          "path": "app/routes/debug.py",
+          "search": "from fastapi import APIRouter",
+          "replace": "from fastapi import APIRouter, Header, HTTPException\nfrom pathlib import Path\nfrom app.routes.auth import current_user"
+        },
+        {
+          "path": "app/routes/debug.py",
+          "search": "def debug_config():\n    return {\"debug\": True, \"secret\": _SECRET}",
+          "replace": "def debug_config(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if user[\"role\"] != \"admin\":\n        raise HTTPException(403, \"admin only\")\n    return {\"debug\": True, \"secret\": _SECRET}"
+        }
+      ]
+    },
+    "acf370340b94ec362d1bbd6ddd5e031a101d300d6a81b1ff0deb827184d5aec0": {
+      "vuln_class": "mass_assignment",
+      "route": "/api/profile",
+      "edits": [
+        {
+          "path": "app/routes/profile.py",
+          "search": "if body.role is not None:\n        conn.execute(\"UPDATE users SET role = ? WHERE id = ?\", (body.role, user[\"id\"]))",
+          "replace": "        # role is not client-writable"
+        }
+      ]
+    },
+    "72d9c27c0074ce1d307f8b03a6dd2397d972d71001397f6c50e2dc45b1180ab7": {
+      "vuln_class": "code_injection",
+      "route": "/api/calc",
+      "edits": [
+        {
+          "path": "app/routes/calc.py",
+          "search": "def calc(expr: str = \"1+1\"):",
+          "replace": "def calc(expr: str = \"1+1\"):\n    import ast\n    import operator\n\n    def safe_eval(node):\n        if isinstance(node, ast.Expression):\n            return safe_eval(node.body)\n        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):\n            return node.value\n        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):\n            return operator.neg(safe_eval(node.operand)) if isinstance(node.op, ast.USub) else safe_eval(node.operand)\n        elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):\n            left = safe_eval(node.left)\n            right = safe_eval(node.right)\n            if isinstance(node.op, ast.Add):\n                return operator.add(left, right)\n            elif isinstance(node.op, ast.Sub):\n                return operator.sub(left, right)\n            elif isinstance(node.op, ast.Mult):\n                return operator.mul(left, right)\n            elif isinstance(node.op, ast.Div):\n                return operator.truediv(left, right)\n        else:\n            raise HTTPException(400, \"Invalid expression\")\n\n    try:\n        tree = ast.parse(expr, mode=\"eval\")\n        result = safe_eval(tree)\n        return {\"expr\": expr, \"result\": str(result)}\n    except Exception as exc:\n        raise HTTPException(400, str(exc))"
         }
       ]
     }

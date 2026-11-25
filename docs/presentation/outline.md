@@ -9,8 +9,9 @@
 5. **What is new:** for builders with no tests (we capture a test suite first, human-approved); every exploit
    becomes a permanent regression test; works with a free API key; a watchable arena.
 6. **How it works:** sandbox per port with its own DB copy, host-locked Red tools, Blue SEARCH/REPLACE edits
-   verified on a staging copy, deterministic referee. Screenshot of the arena.
-7. **Results:** pilot numbers once measured (exploits found, fixes verified, time to patch, tokens). Until then
-   do not invent numbers. Include the negative-control result on targets/shop_app.
+   verified on a staging copy, deterministic referee. Screenshot of the arena and the live victim view (`/target`).
+7. **Results:** quote the README "Pilot results" table (warm-cache sample: 7/7 closed, 0 tokens, fixes in
+   6.5-7.4 s; LLM-only runs with real tokens and calls). Never invent numbers. Include the negative-control
+   result on targets/shop_app.
 8. **Safety, limits, next steps:** local sandbox only; a human reviews the diff; limits: FastAPI only so far,
-   4 bug classes; next: Node/Express targets, CI gate, shadow mode.
+   7 bug classes; next: Node/Express targets, CI gate, shadow mode.

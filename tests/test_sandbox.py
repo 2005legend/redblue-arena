@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from arena.config import load_config
-from arena.sandbox import ALLOWED_PORTS, PortAllocator, TargetBootError, TargetProcess
+from arena.sandbox import ALLOWED_PORTS, PortAllocator, TargetBootError, TargetProcess, port_is_free
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = load_config(str(ROOT / "arena.yaml"))
@@ -29,6 +29,20 @@ def test_ports_never_repeat():
     p = PortAllocator(start=9100)
     got = [p.next() for _ in range(5)]
     assert got == sorted(set(got)) and got[0] == 9100
+
+
+def test_allocator_skips_a_port_something_else_holds():
+    """A kept demo target (or any other process) holds its port; a new match must not be handed it."""
+    holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    holder.bind(("127.0.0.1", 0))
+    holder.listen(1)
+    busy = holder.getsockname()[1]
+    try:
+        assert not port_is_free(busy)
+        picked = PortAllocator(busy).next()
+    finally:
+        holder.close()
+    assert picked > busy and port_is_free(picked)
 
 
 def test_start_and_stop(tmp_path):

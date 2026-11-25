@@ -1,0 +1,22 @@
+# LLM-only demo config: no deterministic sweep, cold patch cache.
+# Red must find the bugs with its model; Blue must write every fix with its model.
+app_dir: fixtures/dev_target
+app_module: app.main:app
+seed_db: fixtures/dev_target/seed.db
+functional_tests: fixtures/dev_target/tests_functional
+users:
+  - {username: alice, password: alice123, role: user}
+  - {username: bob, password: bob123, role: user}
+  - {username: admin, password: admin123, role: admin}
+sample_ids: {own_invoice: 1, other_invoice: 3}
+admin_routes: [/api/admin/export]
+extra_paths: [files, secret.txt]
+loot_paths: [secret.txt]
+attacker_users: [alice]
+flag_owners:
+  FLAG{idor_invoice_leak}: bob
+  FLAG{mass_assignment_leak}: admin
+  FLAG{debug_config_leak}: admin
+  FLAG{code_injection_leak}: admin
+strategy: llm
+cache_path: patches/cache.llm.json

@@ -176,7 +176,7 @@ export const RedAgentPage: React.FC<RedAgentPageProps> = ({ onOpenConfig }) => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
           {[
             { step: "1. Schema Ingestion", desc: "Read /openapi.json and index every route and parameter" },
-            { step: "2. Template Sweep", desc: "Bounded, scripted checks for the four seeded bug classes" },
+            { step: "2. Template Sweep", desc: "Bounded, scripted checks for the seven seeded bug classes" },
             { step: "3. Model Fallback", desc: "Only when the sweep leaves findings unresolved" },
             { step: "4. Flag Capture", desc: "Each leaked canary is recorded with the exact packet" },
           ].map((s, i) => (

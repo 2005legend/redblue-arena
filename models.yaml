@@ -1,0 +1,49 @@
+# FreeLLM router (Tailscale host instabox-dsh-worker) — two pools so Red and Blue differ.
+# Non-secret settings only. Real keys stay in .env: ARENA_API_KEY or the env named by api_key_env.
+base_url: http://100.93.147.107:3001/v1
+api_key_env: FREELLMAPI_API_KEY
+
+aicredits:
+  "name": "AICredits (UPI)"
+  "npm": "@ai-sdk/openai-compatible"
+  "options":
+    "baseURL": "https://api.aicredits.in/v1"
+    "apiKey": "{env:AICREDITS_API_KEY}"
+  "models":
+    "qwen3-30b-a3b":
+      "name": "Qwen3 30B A3B"
+      "limit":
+        "context": 262000
+        "output": 8192
+    "glm-4.7-flash":
+      "name": "GLM 4.7 Flash (Z.ai)"
+      "limit":
+        "context": 200000
+        "output": 8192
+    "deepseek-v3":
+      "name": "DeepSeek V3"
+      "limit":
+        "context": 163840
+        "output": 8192
+    "deepseek-v3.1":
+      "name": "DeepSeek V3.1"
+      "limit":
+        "context": 163840
+        "output": 8192
+    "deepseek-v4.1-flash":
+      "name": "DeepSeek V4.1 Flash"
+      "limit":
+        "context": 163840
+        "output": 8192
+    # deepseek-v4-pro removed per requirement: don't use pro models
+roles:
+  red:
+    - qwen3.8-27b
+    - gpt-oss-20b
+    - gemini-3.5-flash-lite
+    - mistral-code-latest
+  blue:
+    - mistral-code-latest
+    - ministral-14b-latest
+    - gemini-3.5-flash-lite
+    - auto:smart

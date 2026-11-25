@@ -1,6 +1,7 @@
 """python -m arena.cli run|replay|serve"""
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -44,11 +45,15 @@ def cmd_run(a):
             t.stop()
     log = EventLog(Path("matches") / match_id / "events.jsonl")
     log.echo = True
+    keep = a.keep_target or os.environ.get("ARENA_KEEP_TARGET", "0") == "1"
     s = run_match(cfg, red, blue, log, rounds=a.rounds, work_root=work,
-                  out_dir=Path("matches") / match_id, explore=a.explore)
+                  out_dir=Path("matches") / match_id, explore=a.explore, keep_target=keep)
     print(f"\nRed {s.red} - Blue {s.blue} | closed {s.closed}/{s.total} | tokens {s.tokens} | "
           f"ttp {s.ttp}\nsweep {s.sweep_findings} findings in {s.sweep_requests} requests | "
           f"llm calls {s.llm_calls} | cache hits {s.cache_hits}\nExports in matches/{match_id}/")
+    if keep:
+        print(f"Target kept alive at http://127.0.0.1:{s.final_port} — open http://127.0.0.1:8765/target "
+              f"to watch it, and stop that python process when you are done.")
 
 
 def cmd_replay(a):
@@ -74,6 +79,8 @@ def main():
     r.add_argument("--strategy", choices=("hybrid", "sweep", "llm"), default=None)
     r.add_argument("--explore", action="store_true",
                    help="also run the LLM Red pass when the sweep already found bugs")
+    r.add_argument("--keep-target", action="store_true",
+                   help="leave the patched target running after the verdict so /target stays browsable")
     r.set_defaults(fn=cmd_run)
     rp = sub.add_parser("replay")
     rp.add_argument("file")

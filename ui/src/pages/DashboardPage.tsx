@@ -80,6 +80,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     );
   }
 
+  const lastBattle = stats?.recent_battles?.[0];
+
   const statCards = [
     { label: "Total Battles", value: stats?.total_battles ?? 0, icon: Flame, color: "text-cyan-400", bg: "bg-cyan-950/30", border: "border-cyan-800/50" },
     { label: "Red Success Rate", value: `${stats?.red_success_rate ?? 0}%`, icon: Terminal, color: "text-red-400", bg: "bg-red-950/30", border: "border-red-800/50" },
@@ -89,6 +91,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     { label: "Failed Patch Attempts", value: stats?.failed_patch_attempts ?? 0, icon: XCircle, color: "text-rose-400", bg: "bg-rose-950/30", border: "border-rose-800/50" },
     { label: "Average Patch Time", value: stats?.average_patch_time_sec ? `${stats.average_patch_time_sec}s` : "—", icon: Clock, color: "text-purple-400", bg: "bg-purple-950/30", border: "border-purple-800/50" },
     { label: "Final Health (last match)", value: stats?.application_availability ?? "—", icon: Activity, color: "text-cyan-300", bg: "bg-cyan-950/30", border: "border-cyan-800/50" },
+    { label: "Red LLM Calls (last match)", value: lastBattle ? (lastBattle.red_llm_calls ?? "—") : "—", icon: Radio, color: "text-red-300", bg: "bg-red-950/30", border: "border-red-800/50" },
+    { label: "Blue LLM Calls (last match)", value: lastBattle ? (lastBattle.blue_llm_calls ?? "—") : "—", icon: Radio, color: "text-blue-300", bg: "bg-blue-950/30", border: "border-blue-800/50" },
+    { label: "Red Tokens (last match)", value: lastBattle ? (lastBattle.red_tokens ?? "—") : "—", icon: TrendingUp, color: "text-red-300", bg: "bg-red-950/30", border: "border-red-800/50" },
+    { label: "Blue Tokens (last match)", value: lastBattle ? (lastBattle.blue_tokens ?? "—") : "—", icon: TrendingUp, color: "text-blue-300", bg: "bg-blue-950/30", border: "border-blue-800/50" },
   ];
 
   return (

@@ -206,7 +206,7 @@ export const BattleReportsPage: React.FC = () => {
               <div className="p-3 rounded bg-slate-900/60 border border-slate-800 print:bg-gray-100 print:border-gray-300">
                 <span className="text-slate-400 print:text-gray-600 block">Open Findings:</span>
                 <span className="text-lg font-bold text-emerald-400 print:text-emerald-700">
-                  {report.findings.filter((f) => f.status === 'Open').length}
+                  {report.findings.filter((f: any) => f.status === 'Open').length}
                 </span>
               </div>
             </div>

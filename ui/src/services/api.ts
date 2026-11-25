@@ -42,6 +42,15 @@ export interface Battle {
   blue_patches_rejected: number;
   final_health: string;
   outcome: string;
+  sweep_requests: number;
+  sweep_findings: number;
+  llm_calls: number | null;  // null on logs recorded before per-call counts existed
+  red_llm_calls: number | null;  // null when the split was not recorded and cannot be inferred
+  blue_llm_calls: number | null;
+  red_tokens: number | null;
+  blue_tokens: number | null;
+  cache_hits: number;
+  tokens_used: number;
   replay: string;
 }
 
@@ -133,6 +142,14 @@ export interface TargetStatus {
   note: string;
 }
 
+export interface TargetLive {
+  url: string | null;
+  port: number | null;
+  alive: boolean;
+  match_id: string | null;
+  running: boolean;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) {
@@ -153,6 +170,7 @@ export const getBattleReport = (id: string) =>
 export const getVulnerabilities = () => get<Vulnerability[]>('/api/vulnerabilities');
 export const getPatches = () => get<PatchRecord[]>('/api/patches');
 export const getTargetConfig = () => get<TargetStatus>('/api/target/config/status');
+export const getTargetLive = () => get<TargetLive>('/api/target/live');
 export const getCurrentMatch = () => get<{ match_id: string | null; running: boolean }>('/api/match/current');
 
 export async function startMatch(): Promise<string> {

@@ -42,7 +42,7 @@ def test_discover_reads_paths_params_and_login():
     assert find_login_path(OPENAPI, override="/custom/login") == "/custom/login"
 
 
-def test_sweep_finds_all_four_classes_without_an_llm(tmp_path):
+def test_sweep_finds_all_seven_classes_without_an_llm(tmp_path):
     t = target(tmp_path, 9400)
     events = []
     try:
@@ -59,6 +59,9 @@ def test_sweep_finds_all_four_classes_without_an_llm(tmp_path):
         "FLAG{idor_invoice_leak}": "idor",
         "FLAG{admin_export_bypass}": "admin_bypass",
         "FLAG{path_traversal_leak}": "path_traversal",
+        "FLAG{mass_assignment_leak}": "mass_assignment",
+        "FLAG{debug_config_leak}": "debug_exposure",
+        "FLAG{code_injection_leak}": "code_injection",
     }
     idor = next(e for e in exploits if e.vuln_class == "idor")
     assert idor.path == "/api/invoices/3"
@@ -69,6 +72,10 @@ def test_sweep_finds_all_four_classes_without_an_llm(tmp_path):
     assert breaches["sqli"]["method"] == "GET"
     assert breaches["sqli"]["params"] == {"q": "' OR 1=1--"}
     assert breaches["path_traversal"]["params"] == {"name": "../secret.txt"}
+    assert breaches["mass_assignment"]["json"] == {"role": "admin"}
+    assert breaches["debug_exposure"]["path"] == "/api/debug/config"
+    assert breaches["code_injection"]["params"] == {
+        "expr": "[v for v in globals().values() if 'FLAG{' in str(v)]"}
     assert sweep.requests <= 40
 
 

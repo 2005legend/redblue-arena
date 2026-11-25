@@ -2,6 +2,7 @@
 import asyncio
 import io
 import json
+import os
 import re
 import threading
 import time
@@ -15,7 +16,8 @@ from fastapi.responses import FileResponse, Response
 from arena import site_api
 
 MATCHES = Path("matches")
-CONFIG = "arena.yaml"
+CONFIG = os.environ.get("ARENA_CONFIG", "arena.yaml")
+STATIC = Path(__file__).with_name("static")
 STATE: dict = {"log": None, "match_id": None, "thread": None}
 
 app = FastAPI(title="Vibe Arena server")
@@ -95,8 +97,35 @@ def target_control(rest: str):
                              "inside a match sandbox, so there is no exploit console or mode switch")
 
 
+@app.get("/target")
+def live_target_page():
+    """Full-screen victim view: the real target site plus a live attack feed."""
+    return FileResponse(STATIC / "target.html")
+
+
+@app.get("/api/target/live")
+def target_live():
+    """Where the currently running (or kept-alive) target is listening, if anywhere.
+
+    The match a `serve` process started is checked first; otherwise the newest recorded run is
+    used, so a match started from the CLI is visible here too, and a target kept alive with
+    ARENA_KEEP_TARGET=1 stays reachable after a server restart.
+    """
+    mid = STATE.get("match_id")
+    base = {"url": None, "port": None, "alive": False, "match_id": mid,
+            "running": bool(STATE["thread"] and STATE["thread"].is_alive())}
+    found = site_api.live_target(MATCHES, mid) if mid else {"alive": False}
+    if not found.get("alive"):
+        found = site_api.live_target(MATCHES)
+    if not found.get("alive") or not found.get("url"):
+        return base
+    return {**base, "url": found["url"], "port": found["port"], "alive": True,
+            "match_id": found.get("match_id") or mid}
+
+
 @app.post("/api/match/start")
-def start_match(config: str = "arena.yaml"):
+def start_match(config: str | None = None):
+    config = config or CONFIG
     if STATE["thread"] and STATE["thread"].is_alive():
         raise HTTPException(409, "a match is already running")
     from arena.config import load_config
@@ -110,7 +139,8 @@ def start_match(config: str = "arena.yaml"):
     STATE.update(log=log, match_id=match_id)
     t = threading.Thread(target=run_match, daemon=True, kwargs=dict(
         cfg=cfg, llm_red=LLM("red"), llm_blue=LLM("blue"), log=log,
-        out_dir=MATCHES / match_id, work_root=Path("work") / match_id))
+        out_dir=MATCHES / match_id, work_root=Path("work") / match_id,
+        keep_target=os.environ.get("ARENA_KEEP_TARGET", "0") == "1"))
     STATE["thread"] = t
     t.start()
     return {"match_id": match_id}
@@ -143,7 +173,9 @@ async def ws(socket: WebSocket, replay: str | None = None, speed: float = 1.0):
         q = log.subscribe(asyncio.get_running_loop())
         backlog = list(log.events)
         for e in backlog:
-            await socket.send_json(e)
+            # Marked so the victim page can tell history from a live attack: replaying a past
+            # breach against today's target would show a state that never happened.
+            await socket.send_json({**e, "backlog": True})
         while True:
             e = await q.get()
             if e["seq"] < len(backlog):

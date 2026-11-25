@@ -12,15 +12,20 @@ import {
   FileCode2,
   Sliders,
   RotateCcw,
+  Zap,
+  ExternalLink,
+  Globe,
   X
 } from 'lucide-react';
 import {
   getBattles,
   getBattle,
+  getTargetLive,
   startMatch,
   connectBattleWS,
   Battle,
-  BattleEvent
+  BattleEvent,
+  TargetLive
 } from '../services/api';
 
 interface BattleArenaPageProps {
@@ -109,9 +114,10 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
   const [wsState, setWsState] = useState<'idle' | 'connecting' | 'live' | 'replay'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [live, setLive] = useState<TargetLive | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const timelineEndRef = useRef<HTMLDivElement | null>(null);
+  const timelineBoxRef = useRef<HTMLDivElement | null>(null);
   const popupId = useRef(0);
 
   const loadBattles = async () => {
@@ -141,6 +147,27 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
     if (activeBattleId && activeBattleId !== selectedBattleId) setSelectedBattleId(activeBattleId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBattleId]);
+
+  // Where the sandbox is serving the target right now. The centre panel embeds that real
+  // storefront (served by /target) so the audience watches the site leak data while the
+  // feeds report it, instead of only reading log lines.
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const l = await getTargetLive();
+        if (!stop) setLive(l);
+      } catch {
+        if (!stop) setLive(null);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 2500);
+    return () => {
+      stop = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Load the battle summary and stream its recorded log (or the live feed when it is running).
   useEffect(() => {
@@ -204,7 +231,7 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
       const id = ++popupId.current;
       setPopups((prev) => [...prev, {
         id,
-        state: 'breach',
+        state: 'breach' as const,
         route: raw.route,
         vuln_class: raw.vuln_class,
         flag: raw.flag,
@@ -229,8 +256,11 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
     }
   };
 
+  // Scroll only the telemetry list, never the page: during a live match an event arrives every
+  // few seconds, and a page-level scroll would carry the arena away from the victim panel.
   useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const box = timelineBoxRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
   }, [events]);
 
   const dismissPopup = (id: number) => setPopups((prev) => prev.filter((p) => p.id !== id));
@@ -369,6 +399,62 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
         </div>
       </div>
 
+      {/* Two-tier proof strip: deterministic fast-path vs LLM agents, taken from the match log */}
+      {battle && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="p-3.5 rounded-xl bg-[#07100d] border border-emerald-900/60 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-700/60 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-[10px] font-mono font-bold tracking-widest text-emerald-400">
+                  TIER 1 · DETERMINISTIC FAST-PATH
+                </div>
+                <div className="text-[11px] font-mono text-slate-400">
+                  {battle.sweep_requests} sweep requests · {battle.sweep_findings} findings · {battle.cache_hits} cached patches
+                </div>
+              </div>
+            </div>
+            <span className={`px-2 py-1 rounded text-[10px] font-mono font-bold border ${
+              battle.llm_calls === 0
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
+                : 'bg-slate-900 text-slate-400 border-slate-700'
+            }`}>
+              {battle.llm_calls === 0
+                ? '0 LLM calls · 0 tokens'
+                : battle.llm_calls === null
+                  ? 'calls not recorded'
+                  : 'cache miss, model ran'}
+            </span>
+          </div>
+          <div className="p-3.5 rounded-xl bg-[#090d18] border border-cyan-900/60 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-800/60 flex items-center justify-center">
+                <Cpu className="w-4 h-4 text-cyan-400" />
+              </div>
+              <div>
+                <div className="text-[10px] font-mono font-bold tracking-widest text-cyan-400">
+                  TIER 2 · LLM AGENTS
+                </div>
+                <div className="text-[11px] font-mono text-slate-400">
+                  {battle.llm_calls === 0
+                    ? 'Not needed: sweep + cache closed every finding'
+                    : battle.llm_calls === null
+                      ? 'Older log: per-call counts were not recorded'
+                      : 'Used where the fast path had no answer'}
+                </div>
+              </div>
+            </div>
+            <span className="px-2 py-1 rounded text-[10px] font-mono font-bold border bg-slate-900 text-cyan-300 border-cyan-900 text-right leading-4">
+              <span className="text-red-400">RED</span> {battle.red_llm_calls ?? '—'} calls · {battle.red_tokens ?? '—'} tok
+              <br />
+              <span className="text-blue-400">BLUE</span> {battle.blue_llm_calls ?? '—'} calls · {battle.blue_tokens ?? '—'} tok
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 3-COLUMN MAIN ARENA GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT PANEL: RED AGENT */}
@@ -439,6 +525,48 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
                 HEALTH: {healthText}
               </span>
+            </div>
+
+            {/* The real storefront the agents are hitting, straight from the sandbox port.
+                /target?embed=1 is the same victim page as the full-screen view, without its feed. */}
+            <div className="mb-4 rounded-lg overflow-hidden border border-cyan-900/60 bg-black/60">
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-cyan-950">
+                <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold tracking-widest text-cyan-400">
+                  <Globe className="w-3 h-3" /> LIVE VICTIM SITE
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                    live?.alive
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                      : 'bg-slate-900 text-slate-400 border-slate-700'
+                  }`}>
+                    {live?.alive ? `LIVE :${live.port}` : 'OFFLINE'}
+                  </span>
+                  <a
+                    href="/target"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-cyan-800 bg-cyan-950 text-cyan-300 hover:bg-cyan-900 flex items-center gap-1"
+                  >
+                    full screen <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+              </div>
+              {live?.alive && live.url ? (
+                <iframe
+                  src="/target?embed=1"
+                  title="Live victim site under attack"
+                  className="w-full h-[320px] bg-[#070b12]"
+                />
+              ) : (
+                <div className="h-[320px] flex flex-col items-center justify-center gap-1.5 px-5 text-center">
+                  <ShieldAlert className="w-5 h-5 text-slate-600" />
+                  <p className="text-[11px] font-mono text-slate-400">No target is running.</p>
+                  <p className="text-[10px] font-mono text-slate-600">
+                    Start a match and the real MiniShop storefront appears here while Red attacks it.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="p-3.5 rounded-lg bg-black/60 border border-cyan-900/50 space-y-2 mb-4">
@@ -546,7 +674,7 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
           </span>
         </div>
 
-        <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
+        <div ref={timelineBoxRef} className="space-y-2 max-h-80 overflow-y-auto pr-2">
           {events.length === 0 ? (
             <div className="text-center py-10 text-xs font-mono text-slate-500">
               No events yet. Start a live match or pick a recorded battle to replay its log.
@@ -584,7 +712,6 @@ export const BattleArenaPage: React.FC<BattleArenaPageProps> = ({
               );
             })
           )}
-          <div ref={timelineEndRef} />
         </div>
       </div>
     </div>

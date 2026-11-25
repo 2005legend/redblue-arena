@@ -222,11 +222,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* Four Vulnerability Categories */}
+      {/* Seven Vulnerability Categories */}
       <section className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-wide mb-2">
-            FOUR SEEDED VULNERABILITY CATEGORIES
+            SEVEN SEEDED VULNERABILITY CATEGORIES
           </h2>
           <p className="text-sm text-slate-400">
             Isolated educational test scenarios mapped to OWASP Top 10 and CWE classifications.
@@ -266,6 +266,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               cwe: "CWE-862",
               desc: "The export checks that a session exists but never that its role is admin, so a normal user receives the users table and config note FLAG{admin_export_bypass}.",
               mitigation: "Require user['role'] == 'admin' after resolving the session."
+            },
+            {
+              id: "mass_assignment",
+              name: "Mass Assignment",
+              endpoint: "PUT /api/profile",
+              cwe: "CWE-915",
+              desc: "The profile handler copies every field from the request body into the users row, so {\"role\": \"admin\"} escalates a normal account and returns FLAG{mass_assignment_leak}.",
+              mitigation: "Allow-list writable fields (display_name only); never accept role or is_admin from the client."
+            },
+            {
+              id: "debug_exposure",
+              name: "Debug Endpoint Exposure",
+              endpoint: "GET /api/debug/config",
+              cwe: "CWE-489",
+              desc: "A diagnostic endpoint ships without any authentication, so an anonymous request receives the debug secret FLAG{debug_config_leak}.",
+              mitigation: "Require a resolved session with role admin before returning debug data."
+            },
+            {
+              id: "code_injection",
+              name: "Code Injection (eval)",
+              endpoint: "GET /api/calc?expr=...",
+              cwe: "CWE-95",
+              desc: "The calculator passes expr straight to eval(), so a Python expression can scan globals() and return FLAG{code_injection_leak}.",
+              mitigation: "Parse with ast and allow only numeric literals and arithmetic operators; reject everything else with 400."
             }
           ].map((v, i) => (
             <div key={i} className="p-6 rounded-xl bg-[#090d18] border border-slate-800 hover:border-cyan-500/50 transition glow-cyan/10">

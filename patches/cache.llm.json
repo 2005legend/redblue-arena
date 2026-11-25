@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "patches": {
+    "750431ccc09bbc9f72a91d2afa1186642afc1e367bd37912269ca4ab2c92e84a": {
+      "vuln_class": "sqli",
+      "route": "/api/search",
+      "edits": [
+        {
+          "path": "app/routes/invoices.py",
+          "search": "@router.get(\"/api/search\")\ndef search(q: str = \"\"):\n    conn = get_conn()\n    sql = f\"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE '%{q}%'\"\n    try:\n        rows = conn.execute(sql).fetchall()\n    except Exception as exc:\n        raise HTTPException(500, f\"query failed: {exc}\")\n    finally:\n        conn.close()\n    return [dict(r) for r in rows]",
+          "replace": "@router.get(\"/api/search\")\ndef search(q: str = \"\"):\n    conn = get_conn()\n    try:\n        rows = conn.execute(\n            \"SELECT id, name FROM products WHERE hidden = 0 AND name LIKE ?\",\n            ('%' + q + '%',)\n        ).fetchall()\n    except Exception as exc:\n        raise HTTPException(500, f\"query failed: {exc}\")\n    finally:\n        conn.close()\n    return [dict(r) for r in rows]"
+        }
+      ]
+    },
+    "1a1c6f0fc2acf147bc0e71ea39fb8c0224061279016f2875e1792b1d5f4636e0": {
+      "vuln_class": "idor",
+      "route": "/api/invoices",
+      "edits": [
+        {
+          "path": "app/routes/invoices.py",
+          "search": "@router.get(\"/api/invoices/{invoice_id}\")\ndef get_invoice(invoice_id: int, authorization: str | None = Header(default=None)):\n    current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ?\", (invoice_id,)\n    ).fetchone()\n    conn.close()\n    if row is None:\n        raise HTTPException(404, \"not found\")\n    return dict(row)",
+          "replace": "@router.get(\"/api/invoices/{invoice_id}\")\ndef get_invoice(invoice_id: int, authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    conn = get_conn()\n    row = conn.execute(\n        \"SELECT id, owner_id, amount, note FROM invoices WHERE id = ? AND owner_id = ?\", (invoice_id, user[\"id\"])\n    ).fetchone()\n    conn.close()\n    if row is None:\n        raise HTTPException(404, \"not found\")\n    return dict(row)"
+        }
+      ]
+    },
+    "5bf3139c07b5a209c55c7659148f8d36ac93739a0058a0b0d68feaa9e818a4cf": {
+      "vuln_class": "admin_bypass",
+      "route": "/api/admin/export",
+      "edits": [
+        {
+          "path": "app/routes/admin.py",
+          "search": "@router.get(\"/api/admin/export\")\ndef export_all(authorization: str | None = Header(default=None)):\n    current_user(authorization)\n    conn = get_conn()\n    users = [dict(r) for r in conn.execute(\"SELECT id, username, role FROM users\")]\n    notes = [dict(r) for r in conn.execute(\n        \"SELECT key, value FROM config WHERE key = 'export_note'\")]\n    conn.close()\n    return {\"users\": users, \"config\": notes}",
+          "replace": "@router.get(\"/api/admin/export\")\ndef export_all(authorization: str | None = Header(default=None)):\n    user = current_user(authorization)\n    if user[\"role\"] != \"admin\":\n        raise HTTPException(403, \"admin only\")\n    conn = get_conn()\n    users = [dict(r) for r in conn.execute(\"SELECT id, username, role FROM users\")]\n    notes = [dict(r) for r in conn.execute(\n        \"SELECT key, value FROM config WHERE key = 'export_note'\")]\n    conn.close()\n    return {\"users\": users, \"config\": notes}"
+        },
+        {
+          "path": "app/routes/admin.py",
+          "search": "from fastapi import APIRouter, Header",
+          "replace": "from fastapi import APIRouter, Header, HTTPException"
+        }
+      ]
+    }
+  }
+}

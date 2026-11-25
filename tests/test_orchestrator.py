@@ -90,28 +90,105 @@ TRAV_OLD = '''    path = Path("files") / name
 TRAV_FIX = '''    base = Path("files").resolve()
     path = (base / name).resolve()
     if base not in path.parents or not path.is_file():'''
+PROFILE_OLD = '''    if body.role is not None:
+        conn.execute("UPDATE users SET role = ? WHERE id = ?", (body.role, user["id"]))'''
+PROFILE_FIX = '''    # role is not client-writable'''
+DEBUG_OLD = '''from fastapi import APIRouter
+
+router = APIRouter()
+
+_SECRET = Path(__file__).with_name("debug_secret.txt").read_text().strip()
 
 
-def test_sweep_match_closes_all_four_bugs_with_zero_red_tokens(tmp_path):
+@router.get("/api/debug/config")
+def debug_config():
+    return {"debug": True, "secret": _SECRET}'''
+DEBUG_FIX = '''from fastapi import APIRouter, Header
+
+from app.routes.auth import current_user
+
+router = APIRouter()
+
+_SECRET = Path(__file__).with_name("debug_secret.txt").read_text().strip()
+
+
+@router.get("/api/debug/config")
+def debug_config(authorization: str | None = Header(default=None)):
+    user = current_user(authorization)
+    assert user["role"] == "admin", "admin only"
+    return {"debug": True, "secret": _SECRET}'''
+CALC_OLD = '''from fastapi import APIRouter, HTTPException
+
+router = APIRouter()
+
+_SECRET = Path(__file__).with_name("calc_secret.txt").read_text().strip()
+
+
+@router.get("/api/calc")
+def calc(expr: str = "1+1"):
+    try:
+        return {"expr": expr, "result": str(eval(expr))}
+    except Exception as exc:
+        raise HTTPException(400, str(exc))'''
+CALC_FIX = '''import ast
+import operator
+
+from fastapi import APIRouter, HTTPException
+
+router = APIRouter()
+
+_SECRET = Path(__file__).with_name("calc_secret.txt").read_text().strip()
+
+_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+        ast.Div: operator.truediv}
+
+
+def _eval(node):
+    if isinstance(node, ast.Expression):
+        return _eval(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+        return _OPS[type(node.op)](_eval(node.left), _eval(node.right))
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return -_eval(node.operand)
+    raise ValueError("unsupported expression")
+
+
+@router.get("/api/calc")
+def calc(expr: str = "1+1"):
+    try:
+        return {"expr": expr, "result": str(_eval(ast.parse(expr, mode="eval")))}
+    except Exception as exc:
+        raise HTTPException(400, str(exc))'''
+
+
+def test_sweep_match_closes_all_seven_bugs_with_zero_red_tokens(tmp_path):
     red = FakeLLM([])
     blue = FakeLLM([
         {"content": block(SQL_OLD, SQL_FIX), "tool_calls": []},
         {"content": block(SEARCH, FIX), "tool_calls": []},
         {"content": block(ADMIN_OLD, ADMIN_FIX, "app/routes/admin.py"), "tool_calls": []},
         {"content": block(TRAV_OLD, TRAV_FIX, "app/routes/files.py"), "tool_calls": []},
+        {"content": block(PROFILE_OLD, PROFILE_FIX, "app/routes/profile.py"), "tool_calls": []},
+        {"content": block(DEBUG_OLD, DEBUG_FIX, "app/routes/debug.py"), "tool_calls": []},
+        {"content": block(CALC_OLD, CALC_FIX, "app/routes/calc.py"), "tool_calls": []},
     ])
     log = EventLog(tmp_path / "events.jsonl")
     summary = run_match(CFG, red, blue, log, rounds=3, work_root=tmp_path / "work",
                         out_dir=tmp_path / "out", base_port=9930, strategy="sweep",
                         cache_path=tmp_path / "cache.json")
     types = [e["type"] for e in log.events]
-    assert summary.sweep_findings == 4 and summary.red == 4 and summary.closed == 4
-    assert summary.tokens == 0 and red.calls == 0 and summary.llm_calls == blue.calls == 4
+    assert summary.sweep_findings == 7 and summary.red == 7 and summary.closed == 7
+    assert summary.tokens == 0 and red.calls == 0 and summary.llm_calls == blue.calls == 7
+    assert summary.red_tokens == 0 and summary.blue_tokens == 0
+    assert summary.red_llm_calls == 0 and summary.blue_llm_calls == blue.calls == 7
     assert types.index("sweep_start") < types.index("breach") < types.index("sweep_done")
     assert types.index("sweep_done") < types.index("patched")
-    assert types.count("patched") == 4 and types[-1] == "match_end"
+    assert types.count("patched") == 7 and types[-1] == "match_end"
     assert {e["source"] for e in log.events if e["type"] == "breach"} == {"sweep"}
-    assert log.events[0]["strategy"] == "sweep"
+    # The target comes up before the match starts, so match_start need not be events[0].
+    assert next(e for e in log.events if e["type"] == "match_start")["strategy"] == "sweep"
     assert not ALLOWED_PORTS
 
 
@@ -141,10 +218,13 @@ def test_hybrid_skips_the_red_llm_when_the_sweep_finds_bugs(tmp_path):
         {"content": block(SEARCH, FIX), "tool_calls": []},
         {"content": block(ADMIN_OLD, ADMIN_FIX, "app/routes/admin.py"), "tool_calls": []},
         {"content": block(TRAV_OLD, TRAV_FIX, "app/routes/files.py"), "tool_calls": []},
+        {"content": block(PROFILE_OLD, PROFILE_FIX, "app/routes/profile.py"), "tool_calls": []},
+        {"content": block(DEBUG_OLD, DEBUG_FIX, "app/routes/debug.py"), "tool_calls": []},
+        {"content": block(CALC_OLD, CALC_FIX, "app/routes/calc.py"), "tool_calls": []},
     ])
     log = EventLog(tmp_path / "events.jsonl")
     summary = run_match(CFG, red, blue, log, rounds=3, work_root=tmp_path / "work",
                         out_dir=tmp_path / "out", base_port=9940, strategy="hybrid",
                         cache_path=tmp_path / "cache.json")
-    assert summary.sweep_findings == 4 and summary.closed == 4
-    assert red.calls == 0 and summary.tokens == 0 and summary.llm_calls == blue.calls == 4
+    assert summary.sweep_findings == 7 and summary.closed == 7
+    assert red.calls == 0 and summary.tokens == 0 and summary.llm_calls == blue.calls == 7

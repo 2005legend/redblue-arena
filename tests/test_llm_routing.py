@@ -82,3 +82,35 @@ def test_no_budget_means_unlimited():
     for _ in range(5):
         llm.chat([])
     assert llm.tokens_used == 50
+
+
+def test_cooldown_is_configurable_and_can_be_disabled(monkeypatch):
+    monkeypatch.delenv("ARENA_MODEL_COOLDOWN", raising=False)
+    assert LLM("red", models=["a"], client=FakeClient({"a": OK})).cooldown == 60
+    monkeypatch.setenv("ARENA_MODEL_COOLDOWN", "0")
+    assert LLM("red", models=["a"], client=FakeClient({"a": OK})).cooldown == 0
+
+
+def test_provider_settings_come_from_env_then_model_file(tmp_path, monkeypatch):
+    from arena.llm import resolve_provider
+    for k in ("ARENA_BASE_URL", "ARENA_API_KEY", "FREELLMAPI_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    f = tmp_path / "models.yaml"
+    f.write_text("base_url: http://h:3001/v1\napi_key_env: FREELLMAPI_API_KEY\nroles:\n  red: [x]\n")
+    monkeypatch.setenv("FREELLMAPI_API_KEY", "file-key")
+    assert resolve_provider(f) == ("http://h:3001/v1", "file-key")
+    monkeypatch.setenv("ARENA_BASE_URL", "http://env/v1")
+    monkeypatch.setenv("ARENA_API_KEY", "env-key")
+    assert resolve_provider(f) == ("http://env/v1", "env-key")
+
+
+def test_repo_models_yaml_ships_two_distinct_pools():
+    from pathlib import Path
+    from arena.llm import load_config, load_routes
+    root = Path(__file__).resolve().parent.parent
+    cfg = load_config(root / "models.yaml")
+    routes = load_routes(root / "models.yaml")
+    assert str(cfg["base_url"]).startswith("http")
+    assert cfg["api_key_env"] == "FREELLMAPI_API_KEY"
+    assert routes["red"] and routes["blue"]
+    assert routes["red"][0] != routes["blue"][0]

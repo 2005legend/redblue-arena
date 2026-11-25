@@ -2,6 +2,7 @@
 import itertools
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -11,10 +12,32 @@ import httpx
 import psutil
 
 ALLOWED_PORTS: set[int] = set()
+# Demo mode: targets deliberately left running after a match so the victim site stays
+# browsable. They are killed before the next match starts, never leaked across runs.
+KEPT: list["TargetProcess"] = []
 
 
 class TargetBootError(RuntimeError):
     pass
+
+
+def stop_kept() -> None:
+    while KEPT:
+        KEPT.pop().stop()
+
+
+def port_is_free(port: int) -> bool:
+    """True when nothing is listening on 127.0.0.1:port.
+
+    A demo target kept alive for filming holds its port in another process, so a new match must not
+    be handed that port: uvicorn would fail to bind and the match would abort on boot.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
 
 
 class PortAllocator:
@@ -22,7 +45,12 @@ class PortAllocator:
         self._counter = itertools.count(start)
 
     def next(self) -> int:
-        return next(self._counter)
+        for _ in range(200):
+            port = next(self._counter)
+            if port in ALLOWED_PORTS or not port_is_free(port):
+                continue
+            return port
+        raise RuntimeError(f"no free port above {start}")
 
 
 def kill_tree(pid: int) -> None:
@@ -49,6 +77,7 @@ class TargetProcess:
         self.work_root, self.app_module = Path(work_root).resolve(), app_module
         self.extra_paths = list(extra_paths or [])
         self._proc: subprocess.Popen | None = None
+        self._log: object | None = None
 
     @property
     def dir(self) -> Path:
@@ -57,6 +86,10 @@ class TargetProcess:
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
+
+    @property
+    def running(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
 
     def prepare(self) -> Path:
         if self.dir.exists():
@@ -75,10 +108,11 @@ class TargetProcess:
 
     def start(self, timeout: float = 15) -> None:
         env = dict(os.environ, ARENA_DB=str(self.dir / "seed.db"))
+        self._log = open(self.dir / "boot.log", "wb")
         self._proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", self.app_module, "--port", str(self.port),
              "--log-level", "warning"],
-            cwd=self.dir, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            cwd=self.dir, env=env, stdout=self._log, stderr=self._log,
         )
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -92,10 +126,20 @@ class TargetProcess:
                 pass
             time.sleep(0.25)
         self.stop()
-        raise TargetBootError(f"target on port {self.port} failed to boot")
+        tail = ""
+        try:
+            tail = (self.dir / "boot.log").read_text(errors="replace")[-800:].strip()
+        except OSError:
+            pass
+        raise TargetBootError(f"target on port {self.port} failed to boot: {tail}")
 
     def stop(self) -> None:
         if self._proc is not None:
             kill_tree(self._proc.pid)
             self._proc = None
+        if self._log is not None:
+            try:
+                self._log.close()
+            finally:
+                self._log = None
         ALLOWED_PORTS.discard(self.port)

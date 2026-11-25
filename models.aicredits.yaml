@@ -1,0 +1,14 @@
+# AICredits provider for live LLM matches (FreeLLM Tailscale host is offline).
+# Model ids are namespaced as published by https://api.aicredits.in/api/models
+base_url: https://api.aicredits.in/v1
+api_key_env: AICREDITS_API_KEY
+
+roles:
+  red:
+    - deepseek/deepseek-chat-v3.1
+    - deepseek/deepseek-v4.1-flash
+    - qwen/qwen3-30b-a3b
+  blue:
+    - deepseek/deepseek-chat-v3.1
+    - deepseek/deepseek-v4.1-flash
+    - qwen/qwen3-30b-a3b

@@ -8,3 +8,11 @@ node_modules/
 matches/live-*
 .env
 work/
+
+# Local launchers with real API keys set inline; never commit them
+serve.bat
+run_llm.bat
+
+# Local run logs from CLI test passes
+*_output.txt
+llm_run.txt
