@@ -1,0 +1,145 @@
+<svg viewBox="0 0 1440 950" width="1440" height="950" xmlns="http://www.w3.org/2000/svg" style="background:#0b1120;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;">
+  <defs>
+    <marker id="arr-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5" fill="none" stroke="#f87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="950" fill="#0b1120"/>
+
+  <!-- Header -->
+  <text x="720" y="48" text-anchor="middle" font-size="26" font-weight="700" letter-spacing="1.5" fill="#f8fafc">VIBE ARENA — ARCHITECTURE</text>
+  <text x="720" y="76" text-anchor="middle" font-size="14" fill="#94a3b8">Adversarial Red / Blue Arena: Attacker LLM, Defender LLM, and Deterministic Referee</text>
+
+  <!-- COLUMN 1: SETUP & ATTACK -->
+  <rect x="40" y="110" width="360" height="135" rx="14" fill="#172033" stroke="#64748b" stroke-width="1.8"/>
+  <text x="220" y="142" text-anchor="middle" font-size="15" font-weight="700" fill="#f1f5f9">BUILDER + arena.yaml</text>
+  <text x="220" y="170" text-anchor="middle" font-size="12.5" fill="#cbd5e1">10-line config: app dir, seed DB, users</text>
+  <text x="220" y="191" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Admin routes, loot targets</text>
+  <text x="220" y="212" text-anchor="middle" font-size="12.5" fill="#94a3b8">Strategy: hybrid / sweep / llm</text>
+
+  <rect x="40" y="295" width="360" height="135" rx="14" fill="#172033" stroke="#64748b" stroke-width="1.8"/>
+  <text x="220" y="327" text-anchor="middle" font-size="15" font-weight="700" fill="#f1f5f9">SANDBOX (sandbox.py)</text>
+  <text x="220" y="355" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Fresh app copy + immutable seed DB</text>
+  <text x="220" y="376" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Boots victim on port :8000</text>
+  <text x="220" y="397" text-anchor="middle" font-size="12.5" fill="#94a3b8">psutil tree kill, busy-port skip</text>
+
+  <rect x="40" y="480" width="360" height="165" rx="14" fill="#2a151b" stroke="#f87171" stroke-width="1.8"/>
+  <text x="220" y="512" text-anchor="middle" font-size="15" font-weight="700" fill="#fecaca">RED AGENT (sweep.py + red.py)</text>
+  <text x="220" y="542" text-anchor="middle" font-size="12.5" fill="#fca5a5">Tier 1 — Template sweep (0 tokens):</text>
+  <text x="220" y="562" text-anchor="middle" font-size="12.5" fill="#e2e8f0">7 bug classes from /openapi.json</text>
+  <text x="220" y="590" text-anchor="middle" font-size="12.5" fill="#fca5a5">Tier 2 — LLM attacker:</text>
+  <text x="220" y="610" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Budget-capped, host-locked HTTP</text>
+
+  <rect x="40" y="695" width="360" height="150" rx="14" fill="#27200f" stroke="#fbbf24" stroke-width="1.8"/>
+  <text x="220" y="727" text-anchor="middle" font-size="15" font-weight="700" fill="#fde68a">VERIFIED PATCH CACHE</text>
+  <text x="220" y="757" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Accepted fixes stored by (class, route)</text>
+  <text x="220" y="779" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Referee re-verifies on staging next match</text>
+  <text x="220" y="801" text-anchor="middle" font-size="12.5" fill="#fcd34d">Zero-token patch reuse on cache hit</text>
+
+  <!-- COLUMN 2: TARGET, REFEREE & STAGING -->
+  <rect x="515" y="295" width="380" height="135" rx="14" fill="#2a151b" stroke="#f87171" stroke-width="1.8"/>
+  <text x="705" y="327" text-anchor="middle" font-size="15" font-weight="700" fill="#fecaca">TARGET APP (live :8000)</text>
+  <text x="705" y="357" text-anchor="middle" font-size="12.5" fill="#e2e8f0">FastAPI + SQLite — live victim</text>
+  <text x="705" y="378" text-anchor="middle" font-size="12.5" fill="#cbd5e1">demo_shop / Lumen Goods (11 bugs)</text>
+  <text x="705" y="399" text-anchor="middle" font-size="12.5" fill="#94a3b8">Hot-swapped only after referee PASS</text>
+
+  <rect x="515" y="480" width="380" height="165" rx="14" fill="#0f2922" stroke="#34d399" stroke-width="2"/>
+  <text x="705" y="512" text-anchor="middle" font-size="15" font-weight="700" fill="#a7f3d0">DETERMINISTIC REFEREE (no LLM)</text>
+  <text x="705" y="544" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Zero-key replay judge:</text>
+  <text x="705" y="566" text-anchor="middle" font-size="12.5" fill="#cbd5e1">1. Runs 100% of frozen functional tests</text>
+  <text x="705" y="588" text-anchor="middle" font-size="12.5" fill="#cbd5e1">2. Replays Red's exact exploit request</text>
+  <text x="705" y="612" text-anchor="middle" font-size="12.5" fill="#6ee7b7">Scores Blue only if tests PASS &amp; exploit BLOCKED</text>
+
+  <rect x="515" y="695" width="380" height="150" rx="14" fill="#172033" stroke="#64748b" stroke-width="1.8"/>
+  <text x="705" y="727" text-anchor="middle" font-size="15" font-weight="700" fill="#f1f5f9">STAGING COPY + fresh DB</text>
+  <text x="705" y="757" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Blue's candidate patch lands here</text>
+  <text x="705" y="779" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Boots isolated instance on :8010, :8011...</text>
+  <text x="705" y="801" text-anchor="middle" font-size="12.5" fill="#94a3b8">Every step verified before live swap</text>
+
+  <!-- COLUMN 3: OUTPUTS, UI, BLUE AGENT, EVENT LOG -->
+  <rect x="1010" y="110" width="360" height="135" rx="14" fill="#0f2922" stroke="#34d399" stroke-width="1.8"/>
+  <text x="1190" y="142" text-anchor="middle" font-size="15" font-weight="700" fill="#a7f3d0">OUTPUTS</text>
+  <text x="1190" y="172" text-anchor="middle" font-size="12.5" fill="#e2e8f0">hardened.patch · report.md</text>
+  <text x="1190" y="194" text-anchor="middle" font-size="12.5" fill="#cbd5e1">tests/security/*.py</text>
+  <text x="1190" y="216" text-anchor="middle" font-size="12.5" fill="#6ee7b7">Permanent pytest regression test per exploit</text>
+
+  <rect x="1010" y="295" width="360" height="135" rx="14" fill="#132242" stroke="#60a5fa" stroke-width="1.8"/>
+  <text x="1190" y="327" text-anchor="middle" font-size="15" font-weight="700" fill="#bfdbfe">ARENA UI (React + Vite)</text>
+  <text x="1190" y="357" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Live Red / Blue scoreboard</text>
+  <text x="1190" y="378" text-anchor="middle" font-size="12.5" fill="#cbd5e1">VulnPopup cards &amp; diff viewer</text>
+  <text x="1190" y="399" text-anchor="middle" font-size="12.5" fill="#93c5fd">Token counters &amp; health dashboards</text>
+
+  <rect x="1010" y="480" width="360" height="165" rx="14" fill="#132242" stroke="#60a5fa" stroke-width="1.8"/>
+  <text x="1190" y="512" text-anchor="middle" font-size="15" font-weight="700" fill="#bfdbfe">BLUE AGENT (blue.py)</text>
+  <text x="1190" y="544" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Reads breach evidence only</text>
+  <text x="1190" y="566" text-anchor="middle" font-size="12.5" fill="#cbd5e1">Patches narrow files + per-class recipe</text>
+  <text x="1190" y="590" text-anchor="middle" font-size="12.5" fill="#93c5fd">Guardrail: never deletes routes or 403-all</text>
+
+  <rect x="1010" y="695" width="360" height="150" rx="14" fill="#0f2922" stroke="#34d399" stroke-width="1.8"/>
+  <text x="1190" y="727" text-anchor="middle" font-size="15" font-weight="700" fill="#a7f3d0">EVENT LOG (events.jsonl)</text>
+  <text x="1190" y="757" text-anchor="middle" font-size="12.5" fill="#e2e8f0">Every action is a typed event:</text>
+  <text x="1190" y="779" text-anchor="middle" font-size="12.5" fill="#cbd5e1">breach, patched, score, health...</text>
+  <text x="1190" y="801" text-anchor="middle" font-size="12.5" fill="#6ee7b7">Streamed live over WebSocket /ws</text>
+
+  <!-- ARROWS & CLEAN PILL LABELS -->
+  <line x1="220" y1="245" x2="220" y2="288" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr-slate)"/>
+  <rect x="172" y="256" width="96" height="22" rx="11" fill="#0b1120" stroke="#475569" stroke-width="1"/>
+  <text x="220" y="271" text-anchor="middle" font-size="11.5" fill="#cbd5e1">boot config</text>
+
+  <line x1="400" y1="362" x2="508" y2="362" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr-slate)"/>
+  <rect x="415" y="335" width="84" height="22" rx="11" fill="#0b1120" stroke="#475569" stroke-width="1"/>
+  <text x="457" y="350" text-anchor="middle" font-size="11.5" fill="#cbd5e1">spawns</text>
+
+  <path d="M 400 540 L 457 540 Q 465 540 465 532 L 465 398 Q 465 390 473 390 L 508 390" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#arr-red)"/>
+  <rect x="408" y="454" width="102" height="22" rx="11" fill="#0b1120" stroke="#f87171" stroke-width="1"/>
+  <text x="459" y="469" text-anchor="middle" font-size="11.5" fill="#fca5a5">HTTP attacks</text>
+
+  <path d="M 895 390 L 945 390 Q 953 390 953 398 L 953 512 Q 953 520 961 520 L 1003 520" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#arr-red)"/>
+  <rect x="902" y="444" width="104" height="22" rx="11" fill="#0b1120" stroke="#f87171" stroke-width="1"/>
+  <text x="954" y="459" text-anchor="middle" font-size="11.5" fill="#fca5a5">breach evidence</text>
+
+  <path d="M 1010 615 L 961 615 Q 953 615 953 623 L 953 732 Q 953 740 945 740 L 902 740" fill="none" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <rect x="903" y="666" width="102" height="22" rx="11" fill="#0b1120" stroke="#60a5fa" stroke-width="1"/>
+  <text x="954" y="681" text-anchor="middle" font-size="11.5" fill="#93c5fd">patch → staging</text>
+
+  <line x1="400" y1="770" x2="508" y2="770" stroke="#fbbf24" stroke-width="2" marker-end="url(#arr-amber)"/>
+  <rect x="408" y="742" width="100" height="22" rx="11" fill="#0b1120" stroke="#fbbf24" stroke-width="1"/>
+  <text x="458" y="757" text-anchor="middle" font-size="11.5" fill="#fde68a">cache hit (0 tok)</text>
+
+  <line x1="705" y1="695" x2="705" y2="652" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr-slate)"/>
+  <rect x="646" y="661" width="118" height="22" rx="11" fill="#0b1120" stroke="#475569" stroke-width="1"/>
+  <text x="705" y="676" text-anchor="middle" font-size="11.5" fill="#cbd5e1">verify + replay</text>
+
+  <line x1="705" y1="480" x2="705" y2="437" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <rect x="633" y="446" width="144" height="22" rx="11" fill="#0b1120" stroke="#34d399" stroke-width="1"/>
+  <text x="705" y="461" text-anchor="middle" font-size="11.5" fill="#6ee7b7">PASS: swap live port</text>
+
+  <line x1="895" y1="565" x2="1003" y2="565" stroke="#f87171" stroke-width="2" marker-end="url(#arr-red)"/>
+  <rect x="899" y="554" width="108" height="22" rx="11" fill="#0b1120" stroke="#f87171" stroke-width="1"/>
+  <text x="953" y="569" text-anchor="middle" font-size="11.5" fill="#fca5a5">FAIL: drop + logs</text>
+
+  <path d="M 1370 770 L 1394 770 Q 1402 770 1402 762 L 1402 370 Q 1402 362 1394 362 L 1377 362" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <rect x="1352" y="554" width="84" height="22" rx="11" fill="#0b1120" stroke="#34d399" stroke-width="1"/>
+  <text x="1394" y="569" text-anchor="middle" font-size="11.5" fill="#6ee7b7">/ws stream</text>
+
+  <line x1="1190" y1="295" x2="1190" y2="252" stroke="#34d399" stroke-width="2" marker-end="url(#arr-green)"/>
+  <rect x="1126" y="261" width="128" height="22" rx="11" fill="#0b1120" stroke="#34d399" stroke-width="1"/>
+  <text x="1190" y="276" text-anchor="middle" font-size="11.5" fill="#6ee7b7">export deliverables</text>
+
+  <!-- Footer rule -->
+  <rect x="140" y="882" width="1160" height="38" rx="19" fill="#11192c" stroke="#334155" stroke-width="1"/>
+  <text x="720" y="906" text-anchor="middle" font-size="13" font-style="italic" fill="#cbd5e1">One deterministic rule: Blue only scores when every frozen functional test still passes AND Red's exact exploit is blocked.</text>
+</svg>
