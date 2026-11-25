@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lumen Goods</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --card: #ffffff; --ink: #16181d; --muted: #6b7078;
+    --line: #e7e4dc; --accent: #4f46e5; --accent-dark: #3f38c9; --ok: #16a34a; --bad: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+         background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  header.top { position: sticky; top: 0; z-index: 6; background: rgba(255,255,255,.94);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 22px; padding: 12px 26px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 17px; }
+  .logo { width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg,#6366f1,#8b5cf6); }
+  nav.links { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+  nav.links a { color: inherit; text-decoration: none; }
+  nav.links a:hover { color: var(--ink); }
+  .spacer { flex: 1; }
+  .chip { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+          padding: 5px 10px; border-radius: 999px; border: 1px solid #fecaca; background: #fef2f2; color: var(--bad); }
+  .chip.ok { border-color: #bbf7d0; background: #f0fdf4; color: var(--ok); }
+  .who { font-size: 13px; color: var(--muted); } .who b { color: var(--ink); }
+  main { max-width: 1040px; margin: 0 auto; padding: 26px 20px 70px; }
+  .hero { padding: 10px 0 20px; } .hero h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -.02em; }
+  .hero p { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 52ch; line-height: 1.55; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px; margin-top: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+          box-shadow: 0 1px 2px rgba(22,24,29,.05); display: flex; flex-direction: column; gap: 9px; }
+  .card h2 { margin: 0; font-size: 14px; }
+  .card p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  label { font-size: 11.5px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; }
+  input { width: 100%; padding: 8px 10px; font: inherit; font-size: 13.5px; border: 1px solid var(--line);
+          border-radius: 9px; background: #fff; }
+  button { font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; padding: 8px 13px;
+           border-radius: 9px; border: 1px solid var(--accent-dark); background: var(--accent); color: #fff; }
+  button:hover { background: var(--accent-dark); }
+  button.ghost { background: #fff; color: var(--accent-dark); border-color: var(--line); }
+  button.ghost:hover { background: #f5f5ff; }
+  .row { display: flex; gap: 7px; } .row > * { flex: 1; }
+  .hint { font-size: 11px; color: #9aa0a8; }
+  .out { margin-top: 20px; background: #101318; color: #cbd5e1; border-radius: 14px; border: 1px solid #262b33; overflow: hidden; }
+  .out-head { display: flex; align-items: center; gap: 9px; padding: 9px 13px; background: #14181e;
+              border-bottom: 1px solid #262b33; font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #94a3b8; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+  .dot.ok { background: #34d399; } .dot.bad { background: #f87171; }
+  pre { margin: 0; padding: 15px; min-height: 110px; max-height: 340px; overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; line-height: 1.55;
+        white-space: pre-wrap; word-break: break-word; }
+  .flag { background: #f87171; color: #1a0d0c; padding: 0 4px; border-radius: 4px; font-weight: 700; }
+  .err { color: #fca5a5; }
+  .probes { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+            font-size: 11px; color: #9aa0a8; }
+  .probes .lbl { text-transform: uppercase; font-weight: 700; margin-right: 2px; }
+  .probe { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+           background: #fff; color: var(--accent-dark); border: 1px solid var(--line); }
+  .probe:hover { background: #f5f5ff; }
+  footer { margin-top: 34px; text-align: center; color: #9aa0a8; font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo"></span> Lumen Goods</div>
+  <nav class="links">
+    <a href="#shop">Shop</a><a href="#orders">Orders</a><a href="#account">Account</a>
+    <a href="#support">Support</a><a href="#admin">Admin</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="chip" id="build-chip">Vulnerable build</span>
+  <span class="who" id="who">Not signed in</span>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Small tools for slow mornings.</h1>
+    <p>Lumen Goods is a small retail storefront: signed-in customers browse the catalogue, keep orders
+       and receipts, download guides, and raise support tickets. Staff manage exports from the admin area.</p>
+  </section>
+
+  <section class="grid" id="grid">
+    <div class="card">
+      <h2>Sign in</h2>
+      <div><label>Username</label><input id="u" value="alice" /></div>
+      <div><label>Password</label><input id="p" type="password" value="alice123" /></div>
+      <button onclick="login()">Sign in</button>
+      <div class="hint">demo accounts: alice/alice123 · bob/bob123 · carol/carol123 · admin/admin123</div>
+    </div>
+
+    <div class="card" id="shop">
+      <h2>Catalogue search</h2>
+      <div class="row"><input id="q" value="grinder" onkeydown="if(event.key==='Enter')search()" /><button style="flex:0 0 auto" onclick="search()">Search</button></div>
+      <div class="hint">GET /api/products/search</div>
+    </div>
+
+    <div class="card" id="orders">
+      <h2>My orders</h2>
+      <div class="row"><input id="oid" value="1" placeholder="order id" /><button style="flex:0 0 auto" onclick="order()">Open</button></div>
+      <button class="ghost" onclick="myOrders()">List mine</button>
+      <div class="hint">GET /api/orders · /api/orders/{id}</div>
+    </div>
+
+    <div class="card" id="account">
+      <h2>Account</h2>
+      <div><label>Display name</label><input id="dn" value="Alice" /></div>
+      <div class="row"><button onclick="saveProfile()">Save profile</button><button class="ghost" onclick="saveSettings()">Save settings</button></div>
+      <div class="hint">PUT /api/account · PATCH /api/account/settings</div>
+    </div>
+
+    <div class="card" id="support">
+      <h2>Support ticket</h2>
+      <div class="row"><input id="tid" value="2" placeholder="ticket id" /><button style="flex:0 0 auto" onclick="ticket()">Open</button></div>
+      <button class="ghost" onclick="myTickets()">List mine</button>
+      <div class="hint">GET /api/support/tickets · /{id}</div>
+    </div>
+
+    <div class="card">
+      <h2>Guides &amp; attachments</h2>
+      <div class="row"><input id="f" value="welcome.txt" /><button style="flex:0 0 auto" onclick="dl('downloads')">Download</button></div>
+      <div class="row"><input id="a" value="manual.txt" /><button class="ghost" style="flex:0 0 auto" onclick="dl('attachments')">Attachment</button></div>
+      <div class="hint">GET /api/downloads · /api/attachments</div>
+    </div>
+
+    <div class="card" id="admin">
+      <h2>Staff tools</h2>
+      <div class="row"><button onclick="adminExport()">Export</button><button class="ghost" onclick="adminCustomers()">Customers</button></div>
+      <button class="ghost" onclick="debugEnv()">System status</button>
+      <div class="hint">GET /api/admin/* · /api/debug/env</div>
+    </div>
+
+    <div class="card">
+      <h2>Promo widget</h2>
+      <p>Try an expression like <code>2+2</code> in the preview.</p>
+      <div class="row"><input id="w" value="2+2" /><button style="flex:0 0 auto" onclick="widget()">Preview</button></div>
+      <div class="hint">GET /api/widgets/preview</div>
+    </div>
+  </section>
+
+  <section class="out">
+    <div class="out-head"><span class="dot" id="dot"></span><span id="outlabel">Response</span>
+      <span class="spacer" style="flex:1"></span><span id="meta"></span></div>
+    <pre id="out">Pick an action above. Responses from the Lumen Goods API appear here.</pre>
+  </section>
+
+  <div class="probes">
+    <span class="lbl">Manual probe</span>
+    <button class="probe" onclick="probe('sqli')">SQL injection</button>
+    <button class="probe" onclick="probe('idor1')">IDOR · order 2</button>
+    <button class="probe" onclick="probe('idor2')">IDOR · ticket 1</button>
+    <button class="probe" onclick="probe('admin1')">Admin export</button>
+    <button class="probe" onclick="probe('admin2')">CRM dump</button>
+    <button class="probe" onclick="probe('trav1')">Traversal · server.env</button>
+    <button class="probe" onclick="probe('trav2')">Traversal · backup.sql</button>
+    <button class="probe" onclick="probe('mass1')">Mass assignment · role</button>
+    <button class="probe" onclick="probe('mass2')">Mass assignment · is_admin</button>
+    <button class="probe" onclick="probe('debug')">Debug env</button>
+    <button class="probe" onclick="probe('code')">Code injection</button>
+  </div>
+
+  <footer>Lumen Goods · demo storefront running in the arena sandbox · every probe is a real request to this app</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var state = { token: null, username: null };
+  var out = document.getElementById("out");
+  var dot = document.getElementById("dot");
+  var label = document.getElementById("outlabel");
+  var meta = document.getElementById("meta");
+  var who = document.getElementById("who");
+  var SECRET = "tok_live_key_9f77"; // footgun sticker on the pre tag, harmless
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function mark(s) { return esc(s).replace(/FLAG\{[^}]*\}/g, function (m) { return '<span class="flag">' + m + "</span>"; }); }
+
+  function show(title, status, body, ms) {
+    dot.className = "dot " + (status >= 200 && status < 300 ? "ok" : "bad");
+    label.textContent = title;
+    meta.textContent = status ? "HTTP " + status + (ms != null ? " · " + ms + " ms" : "") : "";
+    out.innerHTML = mark(typeof body === "string" ? body : JSON.stringify(body, null, 2));
+  }
+  function fail(title, msg) {
+    dot.className = "dot bad"; label.textContent = title; meta.textContent = "";
+    out.innerHTML = '<span class="err">' + esc(msg) + "</span>";
+  }
+  function setBuild(patched, text) {
+    var chip = document.getElementById("build-chip");
+    if (!chip) return;
+    chip.textContent = text || (patched ? "Patched build" : "Vulnerable build");
+    chip.className = "chip" + (patched ? " ok" : "");
+  }
+  function authHeaders(extra) {
+    var h = { "Content-Type": "application/json" };
+    if (state.token) h["Authorization"] = "Bearer " + state.token;
+    return Object.assign(h, extra || {});
+  }
+  function setWho() {
+    who.innerHTML = state.token ? "Signed in as <b>" + esc(state.username) + "</b>" : "Not signed in";
+  }
+  async function call(title, path, opts) {
+    var t0 = performance.now();
+    try {
+      var res = await fetch(path, opts || {});
+      var ms = Math.round(performance.now() - t0);
+      var text = await res.text();
+      var body; try { body = JSON.parse(text); } catch (e) { body = text || "(empty response)"; }
+      show(title, res.status, body, ms);
+      return { res: res, body: body };
+    } catch (e) { fail(title, String(e)); return null; }
+  }
+
+  window.login = async function () {
+    var u = document.getElementById("u").value.trim();
+    var r = await call("POST /api/login", "/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: u, password: document.getElementById("p").value })
+    });
+    if (r && r.res.ok && r.body && r.body.token) {
+      state.token = r.body.token; state.username = u; setWho();
+    }
+  };
+  window.search = async function () {
+    var q = document.getElementById("q").value;
+    return call("GET /api/products/search", "/api/products/search?q=" + encodeURIComponent(q));
+  };
+  window.myOrders = function () { return call("GET /api/orders", "/api/orders", { headers: authHeaders() }); };
+  window.order = function () {
+    var id = document.getElementById("oid").value.trim() || "1";
+    return call("GET /api/orders/" + id, "/api/orders/" + id, { headers: authHeaders() });
+  };
+  window.myTickets = function () { return call("GET /api/support/tickets", "/api/support/tickets", { headers: authHeaders() }); };
+  window.ticket = function () {
+    var id = document.getElementById("tid").value.trim() || "1";
+    return call("GET /api/support/tickets/" + id, "/api/support/tickets/" + id, { headers: authHeaders() });
+  };
+  window.saveProfile = async function () {
+    return call("PUT /api/account", "/api/account", { method: "PUT", headers: authHeaders(),
+      body: JSON.stringify({ display_name: document.getElementById("dn").value }) });
+  };
+  window.saveSettings = function () {
+    return call("PATCH /api/account/settings", "/api/account/settings", {
+      method: "PATCH", headers: authHeaders(), body: JSON.stringify({ theme: "light" }) });
+  };
+  function dl(kind) {
+    var id = kind === "downloads" ? "f" : "a";
+    var name = document.getElementById(id).value;
+    var path = kind + "?name=" + encodeURIComponent(name);
+    if (kind === "downloads") path = "downloads?file=" + encodeURIComponent(name);
+    return call("GET /api/" + path.split("?")[0], "/api/" + path, { headers: authHeaders() });
+  }
+  window.dl = dl;
+  window.adminExport = function () { return call("GET /api/admin/export", "/api/admin/export", { headers: authHeaders() }); };
+  window.adminCustomers = function () { return call("GET /api/admin/customers", "/api/admin/customers", { headers: authHeaders() }); };
+  window.debugEnv = function () { return call("GET /api/debug/env", "/api/debug/env", { headers: authHeaders() }); };
+  window.widget = function () {
+    var e = document.getElementById("w").value;
+    return call("GET /api/widgets/preview", "/api/widgets/preview?expr=" + encodeURIComponent(e), { headers: authHeaders() });
+  };
+
+  // --- Arena demo bridge -------------------------------------------------------------
+  function buildUrl(path, params) {
+    if (!params || typeof params !== "object") return path;
+    var qs = Object.keys(params).map(function (k) {
+      return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+    }).join("&");
+    return qs ? path + (path.indexOf("?") >= 0 ? "&" : "?") + qs : path;
+  }
+  async function ensureLogin(user) {
+    if (state.token) return true;
+    var r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user || "alice", password: (user || "alice") + "123" }) });
+    if (!r.ok) return false;
+    var j = await r.json();
+    state.token = j.token; state.username = user || "alice"; setWho();
+    return true;
+  }
+  window.addEventListener("message", async function (ev) {
+    var d = ev.data;
+    if (!d || d.type !== "arena:replay") return;
+    var label2 = d.verify ? "POST-PATCH REPLAY" : "ATTACK REPLAY";
+    await ensureLogin();
+    var url = buildUrl(d.path || "/", d.params);
+    var opts = { method: d.method || "GET", headers: authHeaders() };
+    if (d.json) opts.body = JSON.stringify(d.json);
+    var title = label2 + " · " + (d.vuln_class || "leak") + " · " + (d.method || "GET") + " " + url;
+    var r = await call(title, url, opts);
+    if (!r) return;
+    var leaked = /FLAG\{[^}]*\}/.test(JSON.stringify(r.body));
+    if (leaked) setBuild(false);
+    else if (d.verify) setBuild(true, "BLOCKED · " + (d.vuln_class || "attack"));
+    show(title + (leaked ? " · DATA EXFILTRATED" : " · BLOCKED"), r.res.status, r.body, null);
+    var pane = document.querySelector(".out");
+    if (pane) pane.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  window.probe = async function (kind) {
+    await ensureLogin();
+    var r = null;
+    if (kind === "sqli") { document.getElementById("q").value = "' OR 1=1--"; r = await search(); }
+    else if (kind === "idor1") { document.getElementById("oid").value = "2"; r = await order(); }
+    else if (kind === "idor2") { document.getElementById("tid").value = "1"; r = await ticket(); }
+    else if (kind === "admin1") { r = await adminExport(); }
+    else if (kind === "admin2") { r = await adminCustomers(); }
+    else if (kind === "trav1") { document.getElementById("f").value = "../secret.env"; r = await dl("downloads"); docReset("f", "welcome.txt"); }
+    else if (kind === "trav2") { document.getElementById("a").value = "../backup.sql"; r = await dl("attachments"); docReset("a", "manual.txt"); }
+    else if (kind === "mass1") {
+      r = await call("PUT /api/account", "/api/account", { method: "PUT", headers: authHeaders(),
+        body: JSON.stringify({ role: "admin" }) });
+    }
+    else if (kind === "mass2") {
+      r = await call("PATCH /api/account/settings", "/api/account/settings",
+        { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ is_admin: true }) });
+    }
+    else if (kind === "debug") { r = await debugEnv(); }
+    else if (kind === "code") {
+      r = await call("GET /api/widgets/preview",
+        "/api/widgets/preview?expr=" + encodeURIComponent("[v for v in globals().values() if 'FLAG{' in str(v)]"),
+        { headers: authHeaders() });
+    }
+    if (r) setBuild(!/FLAG\{[^}]*\}/.test(JSON.stringify(r.body)));
+    var pane = document.querySelector(".out");
+    if (pane) pane.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  function docReset(id, val) { setTimeout(function () { document.getElementById(id).value = val; }, 800); }
+
+  fetch("/api/products/list").then(function (r) { return r.json(); }).then(function (j) {
+    var host = document.querySelector(".grid");
+    if (!host || !j.products) return;
+    var card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = "<h2>Catalogue</h2><div id='cats' style='display:grid;gap:5px;'></div>";
+    host.prepend(card);
+    document.getElementById("cats").innerHTML = j.products.map(function (p) {
+      return "<div style='display:flex;justify-content:space-between;font-size:13px'><b>" +
+        esc(p.name) + "</b><span>$" + p.price + "</span></div>";
+    }).join("");
+  }).catch(function () {});
+
+  setWho();
+})();
+</script>
+</body>
+</html>
