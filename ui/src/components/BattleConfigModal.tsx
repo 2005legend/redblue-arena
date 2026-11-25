@@ -58,7 +58,7 @@ export const BattleConfigModal: React.FC<BattleConfigModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-white tracking-wide">Battle Configuration</h2>
-              <p className="text-xs text-cyan-400/80 font-mono">Scenario comes from arena.yaml - nothing is simulated</p>
+              <p className="text-xs text-cyan-400/80 font-mono">Scenario comes from arena.yaml</p>
             </div>
           </div>
           <button
