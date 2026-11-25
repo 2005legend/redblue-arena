@@ -72,7 +72,7 @@ def main():
     p = argparse.ArgumentParser(prog="arena")
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--config", default="arena.yaml")
+    r.add_argument("--config", default=os.environ.get("ARENA_CONFIG", "arena.yaml"))
     r.add_argument("--yes", action="store_true")
     r.add_argument("--capture", action="store_true")
     r.add_argument("--rounds", type=int, default=3)
