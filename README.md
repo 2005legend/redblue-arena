@@ -2,6 +2,13 @@
 
 Compute 50 hackathon, Round 1, Domain 9 (Developer Productivity and Intelligent Automation).
 
+## 🎬 Demo video
+
+**[▶ Watch the demo video](https://drive.google.com/file/d/1NGZk-LoY5xjeKkrgJkz0fmTmBSfkw-JY/view?usp=sharing)**
+— a cold-cache live match: the Red agent attacks a real FastAPI storefront, the Blue agent writes
+and verifies source patches in seconds, and the judge sees every exploit replay get `BLOCKED` inside
+the arena.
+
 You vibe-coded an app. Before you deploy it, **Red** (an attacker agent) tries to break it and
 **Blue** (a defender agent) patches the source. A deterministic **referee** (no LLM) decides who
 scored: Blue only scores if every frozen functional test still passes AND Red's exact exploit
@@ -10,14 +17,93 @@ is blocked. You get a hardened `.patch`, a report, and a security test per explo
 Prior work we build on and cite: RvB (arXiv 2601.19726), OpenAI Daybreak, DARPA AIxCC, CAI (arXiv 2510.17521).
 Our angle: aimed at people who ship AI-built apps with no security team and no tests.
 
-Design: `docs/superpowers/specs/2026-11-22-vibe-arena-design.md`
-Plan: `docs/superpowers/plans/2026-11-22-vibe-arena.md`
+---
 
-Planned next (approved 2026-11-24, **not implemented yet**): make `strategy: llm` the default with a
-Blue diagnosis call, and keep the sweep + patch cache behind a new `--demo` flag. Spec and plan:
-`docs/superpowers/specs/2026-11-24-llm-first-match-design.md`,
-`docs/superpowers/plans/2026-11-24-llm-first-match.md`. Until that lands, the default match is still
-`hybrid` and the code below describes what runs today.
+## What it is, end to end
+
+| Layer | Component | Role |
+|---|---|---|
+| Target | `fixtures/dev_target`, `fixtures/demo_shop` | Real FastAPI + SQLite apps run locally in a per-match sandbox |
+| Attack | `arena/sweep.py`, `arena/red.py` | Deterministic 0-token template sweep + an LLM Red agent for leftovers |
+| Defend | `arena/blue.py` | LLM Blue agent writing SEARCH/REPLACE source patches on staging copies |
+| Judge | `arena/referee.py` | Deterministic: frozen tests must 100% pass + the exact exploit replay must be blocked |
+| Memory | `patches/cache*.json` | Verified-fix cache keyed by (vuln_class, route), re-verified every match |
+| Telemetry | `arena/events.py`, `arena/server.py` | Structured JSONL event log streamed over WebSocket to the React UI |
+| UI | `ui/` (React + Vite) | Live arena, dashboard insights, target-app viewer, reports; zero-API-key replay mode |
+
+The whole match is driven by a ~10-line `arena.yaml`: target app dir, seed database, test users,
+admin routes, loot files, flag ownership, strategy (`hybrid | sweep | llm`), and cache path.
+Changing the target = changing one file.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  SW[Template sweep<br/>7 bug classes, 0 tokens<br/>hybrid/sweep only] -- host-locked HTTP --> T[(Target app copy)]
+  R[Red agent<br/>leftovers, or every route in strategy: llm] -- host-locked HTTP --> T
+  T -- breach evidence --> B[Blue agent<br/>narrow files + recipe]
+  B -- cached fix or SEARCH/REPLACE --> S[Staging copy + fresh DB]
+  S -- frozen tests + exploit replay --> F{Referee}
+  F -- pass --> T2[(New live target on next port)]
+  F -- fail --> B
+  T2 --> SW
+```
+
+### 1. Sandbox (`arena/sandbox.py`)
+- Each match boots a **fresh copy of the target app** on a dynamic port (uvicorn subprocess, próccess-tree
+  cleaned with `psutil` at teardown).
+- The DB is copied from an immutable `seed.db` snapshot, so matches never mutate the source website.
+- `extra_paths` (images, loot files like `secret.env`) and `loot_paths` are copied so path-traversal
+  findings are reproducible.
+- The port allocator skips every port already in use, so a kept demo target can never collide with a
+  new match; unsupported targets raise a clear `TargetBootError`.
+
+### 2. Attack — two tiers (`arena/sweep.py`, `arena/red.py`)
+**Tier 1, deterministic, 0 tokens.** The sweep reads `/openapi.json` and replays seven bug classes:
+SQL injection in query params; IDOR over ids 1–10 on `/resource/{id}` routes; attacker-token calls to
+`admin_routes`; path traversal with `../<loot_paths>`; mass assignment of `role` / `is_admin` on
+PUT/PATCH routes; unauthenticated `debug`/`diagnostic` endpoints; and `eval`-style code execution via
+`expr` / `code` / `cmd` query params. All requests run through a host-locked HTTP tool
+(`arena/httptool.py`) that enforces `127.0.0.1` and registered sandbox ports **in Python code** — an
+agent cannot tweet the rules away with a prompt. A strict request-count guardrail caps the sweep.
+
+**Tier 2, agentic.** In `strategy: hybrid` (default) the LLM Red agent only probes leftovers;
+in `strategy: llm` it owns discovery (`arena.llm.yaml`). Red logs in once, keeps a sliding window of
+the last 6 tool steps with observations truncated to 800 chars, and carries per-agent token budgets
+(`ARENA_TOKEN_BUDGET`) with cooldown/fallback in `models.yaml`.
+
+### 3. Defend (`arena/blue.py`)
+When a breach lands, Blue receives **only the files implicated by the route** (plus `main`, `db`,
+`auth`) and a per-class fix recipe (e.g. "parameterize the query", "scope by `user_id`", "check
+`role == admin`"), then replies with SEARCH/REPLACE edit blocks. The parser tolerates real-model
+output drift (marker drift, duplicated first line, dropped decorators); staging boot-log `stderr` is
+fed back to the model when a patch fails to import or boot.
+
+### 4. Referee (`arena/referee.py`) — the honesty core
+A patch is accepted only if **both** hold:
+1. **100% of the frozen functional tests pass** on a staging copy with a fresh DB (tests are captured
+   from the live app pre-match, then hashed — Blue cannot delete routes or 403 everyone to "pass").
+2. **Red's exact exploit replay is blocked** on the patched build, re-authenticated with its own
+   login (a stale stolen token cannot hide any bug).
+
+Pass → the orchestrator swaps the patch into the live target (next port). Fail → the edits are dropped,
+and the event log records an honest `blue_error` instead of an invented patch.
+
+### 5. Verified patch cache (`patches/cache*.json`)
+Every referee-accepted fix is stored keyed by `(vuln_class, route)`. Next match, the sweep finds the
+same bug and Blue verifies the cached patch on staging — **again through the referee** — before
+borrowing it, at **0 LLM tokens**. If it no longer applies, it is dropped and the model writes fresh.
+This is why "0 tokens" is evidence, not marketing.
+
+### 6. Telemetry & UI
+Every action becomes a typed event appended to `matches/<id>/events.jsonl`
+(`target_live`, `match_start`, `breach`, `blue_thinking`, `patched`, `score`, `health`,
+`target_down`, `match_end`) and streamed over WebSocket (`/ws`) to the React arena, which shows
+live VulnPopup cards (exploit packet → DEFENDED with time-to-patch badge), Red/Blue token counters,
+a Tier-1/Tier-2 strip, and the **live victim site** — the real storefront embedded in the page
+(`/target?embed=1`), where each breach is replayed against the actual app and flips to `BLOCKED`
+after each accepted patch. `--replay` re-streams a recorded match with no API key, so judges can
+reproduce the demo offline; dashboard insights, patches and reports are read-only JSON APIs.
 
 ## Run it
 
@@ -38,23 +124,18 @@ cd ui; npm install; npm run dev              # terminal 2, open http://127.0.0.1
 ### Watch the real site get attacked
 
 `http://127.0.0.1:8765/target` is the full-screen victim view, and the **Live Arena** page embeds the
-same site in its centre column (`/target?embed=1`), so one screen shows the arena and the app it is
-fighting over. This is the real storefront from the sandbox, not a mock: when a breach lands, the
-victim page posts Red's exact request into the iframe, the storefront re-issues it with its own
-session, scrolls to its own response panel and shows the leaked canary in red. When the referee
-accepts the fix the page swaps to the newly patched target and re-sends the same request, so the
-site itself answers `BLOCKED` and its header chip flips to e.g. `SQL INJECTION BLOCKED`. The
-**Manual probe** row at the bottom replays all seven bug classes by hand, which keeps a live demo
-working even with no model key.
+same site (`/target?embed=1`), so one screen shows the arena and the app it is fighting over. This is
+the real storefront from the sandbox, not a mock: when a breach lands, the victim page posts Red's
+exact request into the iframe, the storefront re-issues it with its own session, and shows the leaked
+canary in red. When the referee accepts the fix the page swaps to the newly patched target and
+re-sends the same request, so the site itself answers `BLOCKED` and its header chip flips to e.g.
+`SQL INJECTION BLOCKED`. The **Manual probe** row replays all seven bug classes by hand, which keeps
+a live demo working even with no model key.
 
-The Target App page embeds the same storefront at a larger size, and `/api/target/live` (which powers
-all three views) reads the newest match log, so a match started with `python -m arena.cli run` is
-visible too, and a target that outlives its process is health-checked before it is shown.
 `ARENA_KEEP_TARGET=1` before `serve` (or `--keep-target` on the CLI) leaves the patched target alive
-after the verdict so those pages stay browsable; without it the target is torn down at `match_end`.
-A kept target holds its port, so the allocator now skips ports that are already in use.
-Set `ARENA_CONFIG=arena.llm.yaml` in the shell before `serve` to choose which config the Start
-button loads (it is read at import time).
+after the verdict so those pages stay browsable. `ARENA_CONFIG` (read at import) chooses which config
+the Start button loads — the demo ships `arena.demo.yaml` (demo_shop, Lumen Goods, 11 seeded
+findings across the 7 classes) and `arena.llm.yaml` (LLM-only discovery).
 
 ![The Arena page with the live victim site in its centre column](docs/img/arena-with-victim.png)
 
@@ -64,186 +145,64 @@ button loads (it is read at import time).
 
 Live match (needs an OpenAI-compatible LLM). Copy `.env.example` to `.env` and put the key in
 `ARENA_API_KEY` (the file is git-ignored and loaded automatically). Provider URL and the Red/Blue
-pools live in `models.yaml`: the repo ships the FreeLLM router on Tailscale
-(`http://100.93.147.107:3001/v1`, key env `FREELLMAPI_API_KEY`), with Red on fast models and Blue
-on the strongest code model. A model file may also set `base_url` and `api_key_env` (the key itself
-never lives in it); `ARENA_BASE_URL` / `ARENA_API_KEY` win over both. `ARENA_MODELS_FILE` points at a
-different model file, and `ARENA_<ROLE>_MODEL` pins one model per role, with `ARENA_MODEL` as the
-last resort. The Tailscale host must be online (`tailscale status`,
-`curl http://100.93.147.107:3001/api/ping`); list usable ids with
-`curl -H "Authorization: Bearer $FREELLMAPI_API_KEY" http://100.93.147.107:3001/v1/models`.
-Then:
+pools live in `models.yaml`; `ARENA_BASE_URL` / `ARENA_API_KEY` win over both, `ARENA_<ROLE>_MODEL`
+pins one model per role. Then:
 
 ```powershell
-.venv\Scripts\python -m arena.cli run --config arena.yaml --yes
+.venv\Scripts\python -m arena.cli run --config arena.demo.yaml --yes
 ```
 
-Pointing it at another FastAPI app: copy `arena.yaml` and edit `app_dir`, `seed_db`, `functional_tests`,
-two normal-user logins, `sample_ids`, `admin_routes`, `extra_paths`, `loot_paths` (files a traversal
-could reach, e.g. `secret.txt`), `flag_owners`, `strategy` and `cache_path`. `--capture` drafts the
-functional tests with the LLM (you approve them unless `--yes`).
+Pointing it at another FastAPI app: copy `arena.yaml`, edit `app_dir`, `seed_db`, `functional_tests`,
+two normal-user logins, `sample_ids`, `admin_routes`, `extra_paths`, `loot_paths`, `flag_owners`,
+`strategy` and `cache_path`. `--capture` drafts the functional tests with the LLM.
 
-## Token strategy: two tiers
+## Token strategy summary
 
-Matches are cheap by default. Cheapest first, most expensive last:
-
-**Tier 1 — deterministic fast-path (0 tokens, 0 LLM calls).** A deterministic pass reads
-`/openapi.json` and replays the seven bug classes we always test: SQL injection in query params,
-IDOR over ids 1–10 on `/resource/{id}` routes, attacker-token calls to `admin_routes`, path
-traversal with `../<loot_paths>`, mass assignment of `role`/`is_admin` on PUT/PATCH routes,
-unauthenticated `debug`/`diagnostic` endpoints, and `eval`-style code execution through
-`expr`/`code`/`cmd` query params.
-1. **Template sweep.** In the UI these requests and breaches are labelled **template**, so the
-   audience can see what the scripts found versus what the model found.
-2. **Blue reads less and reuses fixed patches.** Blue gets only the files implicated by the route
-   (plus `main`, `db`, `auth`) and a per-class fix recipe. A verified SEARCH/REPLACE edit is stored
-   in `patches/cache.json`, keyed by class + route (not by token or payload); the next match verifies
-   it on staging before spending any tokens, and drops it if it no longer applies.
-
-The recorded `sample` match is pure Tier 1: 25 sweep requests, 7 findings, 7 cache hits,
-**0 LLM calls, 0 tokens**. The Arena page reads those counters from the event log and shows both
-tiers side by side, so this is evidence rather than a claim.
-
-**Tier 2 — LLM agents (only where Tier 1 has no answer).**
-3. **LLM Red only for leftovers.** In `strategy: hybrid` (default) the model is asked only when the
-   sweep comes back empty (or `--explore` forces a pass). `strategy: sweep` never calls Red's LLM;
-   `strategy: llm` skips the sweep entirely and is what `arena.llm.yaml` uses. Red also logs in once
-   before speaking and keeps only the last 6 tool steps, with each observation truncated to 800
-   chars plus an explicit `FLAGS FOUND:` line.
-4. **Cold cache or new codebase.** A cache miss (new route or deleted cache) sends the finding to
-   Blue's model, which writes a fresh SEARCH/REPLACE patch; the referee still verifies it.
-
-Override per run: `--strategy hybrid|sweep|llm`, `--explore`. The UI shows `SWEEP-FIRST`,
-`TEMPLATE SWEEP` or `LLM RED`, plus LLM round-trips, tokens and cache hits from the log.
-
-### Cold-cache demo (shows the AI working)
-
-Tier 1 alone can look like "just a script", so record one Tier 2 match for the video:
-
-```powershell
-# 1. Make the cache cold so Blue must write a fresh patch
-Remove-Item patches\cache.json
-
-# 2. Sweep finds the bugs, --explore also runs Red's LLM, Blue has no cached fix
-.venv\Scripts\python -m arena.cli run --config arena.yaml --yes --explore
-```
-
-Play back both matches: the sample shows 0 LLM calls / 0 tokens, the cold run shows the model's
-reasoning and a newly generated diff. `ARENA_MODEL_COOLDOWN` (seconds, `0` = retry immediately)
-controls how long a failing model rests between fallback attempts.
-
-### LLM-only match (`arena.llm.yaml`)
-
-For a run where the models do the discovery too, use the shipped LLM-only config: `strategy: llm`
-(no sweep) and its own cache file, `patches/cache.llm.json`. Delete that file for a fully cold run,
-so Red must find the bugs and Blue must write every patch:
-
-```powershell
-Remove-Item patches\cache.llm.json -ErrorAction SilentlyContinue
-.venv\Scripts\python -m arena.cli run --config arena.llm.yaml --yes
-```
-
-The shipped `matches/sample.jsonl` is still the 0-token sweep recording above (the offline path for
-judges); the LLM-only run is the one to record when the audience should see the models reasoning.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  SW[Template sweep<br/>7 bug classes, 0 tokens<br/>hybrid/sweep only] -- host-locked HTTP --> T[(Target app copy)]
-  R[Red agent<br/>leftovers, or every route in strategy: llm] -- host-locked HTTP --> T
-  T -- breach evidence --> B[Blue agent<br/>narrow files + recipe]
-  B -- cached fix or SEARCH/REPLACE --> S[Staging copy + fresh DB]
-  S -- frozen tests + exploit replay --> F{Referee}
-  F -- pass --> T2[(New live target on next port)]
-  F -- fail --> B
-  T2 --> SW
-```
+| Tier | Cost | What it does |
+|---|---|---|
+| 1 — template sweep | **0 tokens** | OpenAPI-driven replay of 7 bug classes; findings labelled `template` |
+| 2 — cache hit | **0 tokens** | Referee re-verifies a stored fix on staging before the swap |
+| 2 — cold fix | model tokens | Blue writes a fresh SEARCH/REPLACE patch (e.g. 12.5k tokens / 9 calls on demo_shop) |
 
 ## Status (Nov 25)
 
-Done (99 tests, all passing on Nov 25): dev target with 7 seeded bug classes (SQL injection, IDOR, admin bypass,
-path traversal, mass assignment, debug endpoint exposure, eval code injection), sandbox (per-port process, DB copy, extra data paths, psutil tree kill, busy-port skipping for a kept demo target), host-locked HTTP tool,
-referee with login-aware exploit replay (a stale token cannot hide a bug), deterministic template sweep
-(OpenAPI-driven, labelled in the UI), Red LLM agent with one-time pre-login, compact observations and capped
-history, Blue SEARCH/REPLACE pipeline with staging verification (staging is always torn down, even on
-errors) and tolerant parsing of real-model output (marker drift, duplicated first line, dropped route
-decorators), narrow file selection, per-class fix recipes, boot-log feedback (the staging process
-stderr is fed back to the model when a patch fails to import or boot), and a verified-patch cache, test capture and freeze,
-exporter (security tests log in again instead of reusing a token), orchestrator with
-`hybrid|sweep|llm` strategies, event log, WebSocket server with replay, React SOC UI with live
-vulnerability cards (the exploit request and canary pop on screen, then flip to DEFENDED with the
-patch time when the referee accepts Blue's fix), a Tier 1 / Tier 2 counter strip read from the log,
-read-only SOC endpoints (`/api/battles`, `/api/dashboard/stats`, `/api/vulnerabilities`, `/api/patches`,
-`/api/battles/{id}/report`, `/api/target/config/status`, `/api/target/live`) over `arena/site_api.py`
-(outcomes come from the referee summary, so Red re-testing a known bug does not read as an unpatched
-finding, and the dashboard counts a re-tested bug once), a live victim view (`/target`, embedded in
-the Target App page and in the Arena centre column) that replays each real breach inside the actual
-storefront and each accepted fix against the patched target (the site's own response panel shows the
-leak, then `BLOCKED`, and its header chip follows), `ARENA_KEEP_TARGET=1` / `--keep-target` to leave
-the patched target browsable after the verdict, `live_target()` so a CLI-run or kept target is found
-from the newest match log, a log without `match_end` older than 10 minutes reading as
-`interrupted` instead of `running`, `.env` loading, per-role model pools
-(`models.yaml` / `ARENA_MODELS_FILE` / `ARENA_<ROLE>_MODEL`) with a model file able to set
-`base_url`/`api_key_env`, fallback and cooldown (`ARENA_MODEL_COOLDOWN`), per-agent token budget
-(`ARENA_TOKEN_BUDGET`), and per-agent usage reporting (Red and Blue LLM calls and tokens: recorded
-directly in new logs, inferred from `blue_thinking` events / the total for older ones, "—" when a
-split cannot be proven).
+Done (99 tests passing): the seven bug classes on both targets, sandbox, host-locked HTTP tool, referee
+with login-aware replay, deterministic sweep, Red agent with compact history, Blue SEARCH/REPLACE
+pipeline with staging verification and tolerant parsing, verified-patch cache, test capture & freeze,
+exporter, orchestrator with three strategies, event log + WebSocket replay, React SOC UI with live
+victim view, read-only endpoints, `.env` loading, per-role model pools, fallback & cooldown, per-agent
+token budgets and per-agent usage reporting. `matches/live-20261125-171854` is the cold-cache demo_shop
+run: 9/9 recorded exploits closed, 12,509 tokens across 9 LLM calls, 12/12 health.
 
-Known test gap (Nov 25): the suite is green at 99/99, but
-`tests/test_capture.py::test_capture_filters_cross_user_and_failing` can fail inside a full
-one-process Windows run with `WinError 145` while pytest's temp directory is being cleaned; it passes
-alone and on a re-run, so it is an environment flake, not a product bug. The three stale
-`match_end`-is-last assertions in `tests/test_orchestrator.py` were fixed on Nov 25 (the target now
-starts before `match_start`, and `target_down` precedes `match_end`).
-
-NOT done yet:
-1. **Recorded matches.** Four runs exported from the UI / CLI: `matches/live-20261123-203327` (warm
-   cache, 4 classes: 4/4 closed, 18 sweep requests, 4 cache hits, 0 LLM calls, 0 tokens),
-   `matches/live-20261123-212404` (cold cache, 4 classes: 4/4 closed, Blue wrote 4 fresh patches in
-   3,964 tokens / 4 LLM calls), `matches/live-20261123-213239` (hybrid `--explore`: Red's LLM made
-   33 calls / ~71 extra requests but added no unique findings beyond the sweep's four) and
-   `matches/live-20261124-081222` (7 classes: 7/7 closed, 5 cache hits, 2 fresh Blue patches,
-   2,329 tokens / 2 LLM calls). `matches/live-20261124-081411` is the final warm 7-class run that
-   became `sample.jsonl`: 7/7 closed, 25 sweep requests, 7 cache hits, 0 LLM calls, 0 tokens, fixes
-   in 6.5–7.4 s, 9/9 health. Benchmarks measured on Nov 25 are in "Pilot results" below; the only
-   cell still open is tokens-per-match with the budget guard actually tripped.
-2. **Demo target honesty.** We asked a fresh AI agent for a shop app with a plain prompt and it came out secure
-   (`targets/shop_app/GENERATION_LOG.md`). So `fixtures/dev_target` is described as "representative of common
-   AI-generated bugs", never as "unedited AI output". Try other tools or prompts if you want a natural one.
-3. `matches/sample.jsonl` is now a **real recorded match** (sweep-first, all seven bugs, seven cached
-   fixes, 0 tokens). The replay server marks every replayed `match_start` as `sample`, so the UI always
-   shows "SAMPLE REPLAY"; re-record it after changing the target or cache.
-4. Demo video, PPT (outline in `docs/presentation/outline.md`, script in `docs/demo/script.md`), and who does
-   what in `docs/TEAM_TASKS.md`.
-5. Rules check: ask the organisers whether code written before Nov 23 is allowed.
+Known test gap: `tests/test_capture.py` can flake (`WinError 145`) inside a full one-process Windows
+run; it passes alone and on re-run — environment, not product.
 
 ## Pilot results
 
 | Run | Outcome |
 |---|---|
-| live-20261122-212025 | 0–0, 75k tokens. Capture kept 1 of 6 tests; Red never logged in successfully. |
-| live-20261122-213906 | 0–0, 25k tokens. Same login failure; fixed afterwards. |
-| live-20261122-214210 | 6/6 health. Red breached SQLi, admin bypass and IDOR; Blue patched all three in 6–60 s and health stayed 6/6. Interrupted before a clean export. |
-| live-20261123-203327 | 4/4 closed, 0 tokens, 0 LLM calls. Warm cache: 18 sweep requests, 4 findings, 4 cached fixes in 5.2–5.4 s, 6/6 health, exported. |
-| live-20261123-212404 | 4/4 closed, 3,964 tokens, 4 LLM calls. Cold cache (Blue's real LLM): 18 sweep requests, 4 findings, fresh patches in 6.4–8.0 s, 6/6 health, exported. |
-| live-20261123-213239 | 4/4 closed, 54,972 tokens, 33 LLM calls, 4 cache hits. Hybrid `--explore`: Red's LLM made ~71 extra requests but found nothing new beyond the sweep; Blue's cached fixes in 6.6–7.1 s, exports written. |
-| live-20261123-221117 | 4/7 closed, 0 tokens. Cache warm for 4 classes; the FreeLLM host went offline, so the 3 new classes ended in `blue_error` (honest log, no invented patches). |
-| live-20261124-080946 | 5/7 closed, 21,768 tokens, 15 LLM calls. Fully cold 7-class run: mass assignment and code injection failed fresh generation (missing import / broken functional test); fixed the recipes afterwards. |
-| live-20261124-081222 | 7/7 closed, 2,329 tokens, 2 LLM calls, 5 cache hits. Cold additions after the recipe fix: Blue wrote mass-assignment and code-injection patches from scratch in one round-trip each. |
-| live-20261124-081411 | 7/7 closed, 0 tokens, 0 LLM calls. Warm cache: 25 sweep requests, 7 findings, 7 cached fixes in 6.5–7.4 s, 9/9 health. Copied to `matches/sample.jsonl`. |
-| live-20261124-203557 | LLM-only (`strategy: llm`, cold): 3/4 closed. Red 67,659 tokens / 75 calls, Blue 8,236 / 6. No refusals; Red used its whole 25-step budget in all 3 rounds. |
-| live-20261124-204817 | LLM-only repeat: 3/4 closed. Red 67,230 tokens / 75 calls, Blue 8,113 / 6. Same shape as the run above. |
-| live-20261125-140157 / -140948 / -141846 | Warm-cache 7-class matches: 7/7 closed each, 0 LLM calls, 0 tokens, fixes in 6.6–9.1 s, 9/9 health. These three are the per-class 3-run sample. |
+| live-20261123-203327 | 4/4 closed, 0 tokens, 0 LLM calls (warm cache, dev_target) |
+| live-20261123-212404 | 4/4 closed, 3,964 tokens, 4 LLM calls (cold cache, dev_target) |
+| live-20261123-213239 | 4/4 closed, 54,972 tokens, 33 LLM calls (`--explore`: no findings beyond the sweep) |
+| live-20261124-081222 | 7/7 closed, 2,329 tokens, 2 LLM calls (dev_target, cold additions) |
+| live-20261124-081411 | 7/7 closed, 0 tokens (warm; became `sample.jsonl`) |
+| live-20261124-203557 / -204817 | LLM-only: 3/4 closed, Red ~67.6k tok / 75 calls, Blue ~8.2k / 6, 0 refusals |
+| live-20261125-140157 / -140948 / -141846 | Warm-cache 7-class: 7/7 closed × 3, 0 tokens (per-class 3-run sample) |
+| live-20261125-171854 | **demo_shop cold-cache: Red 9 – Blue 9, 9/9 closed, 12,509 tokens / 9 LLM calls, ttp 12–28 s** |
 
-Measured numbers (Nov 25):
-
-- **Per-class pass rate over 3 runs:** all seven classes closed in each of the last three complete
-  matches (`live-20261125-140157`, `-140948`, `-141846`) — 7/7 × 3, 0 LLM calls, 0 tokens.
-- **Refusal rate:** 0 of 150 Red model replies ended the loop early in the two LLM-only runs (a
-  text-only reply stops the loop; both runs instead exhausted the 25-step budget in all 3 rounds).
-- **Tokens per agent, all recorded matches:** Red 189,861 in 302 calls, Blue 69,914 in 83 calls where
+- **Per-class pass rate over 3 runs:** all seven classes closed in each warm match.
+- **Refusal rate:** 0 of 150 Red model replies ended the loop early.
+- **Tokens per agent, all recorded matches:** Red 189,861 / 302 calls, Blue 69,914 / 83 calls where
   the split is provable; 6 older runs (307,087 tokens) predate per-agent accounting and are reported
-  as `—` rather than guessed. Full table in `docs/AUDIT-2026-11-25.md`.
-- **Budget guard:** still to measure with a run that actually trips `ARENA_TOKEN_BUDGET` (the guard
-  itself is unit-tested).
+  as `—`. Full table in `docs/AUDIT-2026-11-25.md`.
+
+## Deliverables per match
+
+- `matches/<id>/hardened.patch` — clean unified diff for `git apply` + human review
+- `matches/<id>/report.md` — findings, exploit requests, fix diffs, before/after replay proof
+- `tests/security/*.py` — a permanent pytest regression test per exploit (login-aware), CI-ready
+
+## Documentation map
+
+Design, plans and audits live under `docs/`; the demo storyboard and script under `docs/demo/`;
+screenshots in `docs/img/`; match exports (reports, patches, security tests) under `matches/<id>/`.
